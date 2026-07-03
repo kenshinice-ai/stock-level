@@ -1,6 +1,6 @@
 name = "stock-level"
 main = "worker.js"
-compatibility_date = "2026-07-03"
+compatibility_date = "2026-07-04"
 workers_dev = true
 
 [assets]

@@ -1,8 +1,10 @@
 name = "stock-level"
 main = "worker.js"
 compatibility_date = "2026-07-03"
+workers_dev = true
 
 [assets]
 directory = "./public"
 binding = "ASSETS"
+not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]

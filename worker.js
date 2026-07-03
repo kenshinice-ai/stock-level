@@ -1,4 +1,4 @@
-const VERSION = "2026-07-03-v6-nearby-raw-debug";
+const VERSION = "2026-07-03-v7-officeworks-legacy-parser";
 
 const OW = {
   stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
@@ -10,7 +10,15 @@ const OW = {
 const MAX_BATCH_SIZE = 20;
 
 const ALLOWED_STATES = new Set([
-  "all", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"
+  "all",
+  "ACT",
+  "NSW",
+  "NT",
+  "QLD",
+  "SA",
+  "TAS",
+  "VIC",
+  "WA"
 ]);
 
 const CORS = {
@@ -24,7 +32,10 @@ export default {
   async fetch(request, env) {
     try {
       if (request.method === "OPTIONS") {
-        return new Response(null, { status: 204, headers: CORS });
+        return new Response(null, {
+          status: 204,
+          headers: CORS
+        });
       }
 
       if (request.method !== "GET") {
@@ -44,11 +55,14 @@ export default {
 
       return html(`<h1>Stock Level Worker ${VERSION}</h1>`, 200);
     } catch (err) {
-      return json({
-        ok: false,
-        version: VERSION,
-        error: err && err.message ? err.message : "Unexpected Worker error"
-      }, 500);
+      return json(
+        {
+          ok: false,
+          version: VERSION,
+          error: err && err.message ? err.message : "Unexpected Worker error"
+        },
+        500
+      );
     }
   }
 };
@@ -69,15 +83,17 @@ async function handleApi(request, env, url, path) {
       ok: true,
       version: VERSION,
       maxBatchSize: MAX_BATCH_SIZE,
-      note: "Use nearby postcode mode to avoid Cloudflare Free plan subrequest limits.",
-      endpoints: OW
+      parser:
+        "Legacy-first parser: availability[0].options[] where type === inStore and qty > 0.",
+      endpoints: OW,
+      time: new Date().toISOString()
     });
   }
 
   if (path === "/api/stores") {
     const state = normaliseState(url.searchParams.get("state") || "all");
     const postcode = normalisePostcode(url.searchParams.get("postcode"));
-    const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 200, 25);
+    const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 250, 25);
 
     const stores = await getStores({ state, postcode, radiusKm });
 
@@ -95,6 +111,13 @@ async function handleApi(request, env, url, path) {
   if (path === "/api/store-search") {
     const query = String(url.searchParams.get("query") || "").trim().toLowerCase();
     const state = normaliseState(url.searchParams.get("state") || "all");
+
+    if (!query) {
+      return json({
+        ok: false,
+        error: "Missing query. Example: /api/store-search?query=Carnegie"
+      }, 400);
+    }
 
     const stores = await getStores({ state });
 
@@ -144,12 +167,12 @@ async function handleApi(request, env, url, path) {
     if (!sku || !storeId) {
       return json({
         ok: false,
-        error: "Missing sku or storeId. Example: /api/raw?sku=JBAALR618B&storeId=W355"
+        error: "Missing sku or storeId. Example: /api/raw?sku=JBAALR618B&storeId=W411"
       }, 400);
     }
 
     const raw = await fetchAvailabilityRaw(storeId, sku);
-    const parsed = parseAvailability(raw);
+    const parsed = parseAvailabilityLegacyFirst(raw);
 
     return json({
       ok: true,
@@ -165,7 +188,7 @@ async function handleApi(request, env, url, path) {
     const sku = normaliseSku(url.searchParams.get("sku"));
     const state = normaliseState(url.searchParams.get("state") || "all");
     const postcode = normalisePostcode(url.searchParams.get("postcode"));
-    const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 200, 25);
+    const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 250, 25);
     const offset = clampInt(url.searchParams.get("offset"), 0, 100000, 0);
     const limit = clampInt(url.searchParams.get("limit"), 1, MAX_BATCH_SIZE, MAX_BATCH_SIZE);
 
@@ -189,6 +212,7 @@ async function handleApi(request, env, url, path) {
       let parsed = {
         qty: 0,
         status: "no_stock",
+        source: "none",
         rawSignal: ""
       };
 
@@ -196,11 +220,12 @@ async function handleApi(request, env, url, path) {
 
       try {
         const raw = await fetchAvailabilityRaw(store.storeId, sku);
-        parsed = parseAvailability(raw);
+        parsed = parseAvailabilityLegacyFirst(raw);
       } catch (err) {
         parsed = {
           qty: null,
           status: "error",
+          source: "error",
           rawSignal: ""
         };
         error = err && err.message ? err.message : "Availability lookup failed";
@@ -219,7 +244,9 @@ async function handleApi(request, env, url, path) {
         distanceKm: store.distanceKm,
         qty: parsed.qty,
         status: parsed.status,
+        source: parsed.source,
         rawSignal: parsed.rawSignal,
+        options: parsed.options || [],
         error
       };
     });
@@ -231,6 +258,7 @@ async function handleApi(request, env, url, path) {
 
       const aq = stockSortValue(a);
       const bq = stockSortValue(b);
+
       return bq - aq || String(a.storeName).localeCompare(String(b.storeName));
     });
 
@@ -267,12 +295,15 @@ async function handleApi(request, env, url, path) {
     });
   }
 
-  return json({
-    ok: false,
-    version: VERSION,
-    error: "API route not found",
-    path
-  }, 404);
+  return json(
+    {
+      ok: false,
+      version: VERSION,
+      error: "API route not found",
+      path
+    },
+    404
+  );
 }
 
 function cleanPath(pathname) {
@@ -307,6 +338,7 @@ function clampInt(value, min, max, fallback) {
   const n = Number.parseInt(String(value ?? ""), 10);
 
   if (!Number.isFinite(n)) return fallback;
+
   return Math.max(min, Math.min(max, n));
 }
 
@@ -314,12 +346,13 @@ function clampNumber(value, min, max, fallback) {
   const n = Number(String(value ?? ""));
 
   if (!Number.isFinite(n)) return fallback;
+
   return Math.max(min, Math.min(max, n));
 }
 
 async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/stores-v6?state=${state}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/stores-v7?state=${state}`);
 
   let stores;
 
@@ -374,7 +407,10 @@ async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {
           distanceKm: round1(distanceKm(centre.lat, centre.lng, store.lat, store.lng))
         };
       })
-      .filter((store) => typeof store.distanceKm === "number" && store.distanceKm <= radiusKm)
+      .filter(
+        (store) =>
+          typeof store.distanceKm === "number" && store.distanceKm <= radiusKm
+      )
       .sort((a, b) => a.distanceKm - b.distanceKm);
   }
 
@@ -391,6 +427,7 @@ function normaliseStore(store) {
     store.storeLatitude,
     store.geoLat,
     store.geoLatitude,
+    store.gpsLatitude,
     addressObj.latitude,
     addressObj.lat,
     addressObj.storeLatitude
@@ -404,6 +441,7 @@ function normaliseStore(store) {
     store.storeLongitude,
     store.geoLng,
     store.geoLongitude,
+    store.gpsLongitude,
     addressObj.longitude,
     addressObj.lng,
     addressObj.lon,
@@ -413,44 +451,31 @@ function normaliseStore(store) {
   return {
     storeId: String(
       store.storeId ||
-      store.id ||
-      store.storeNumber ||
-      store.locationId ||
-      ""
-    ).trim().toUpperCase(),
-    storeName: decodeHtml(String(
-      store.storeName ||
-      store.name ||
-      store.displayName ||
-      ""
-    )),
-    address: decodeHtml(String(
-      addressObj.storeAddressLine ||
-      addressObj.addressLine1 ||
-      addressObj.address ||
-      ""
-    )),
-    suburb: decodeHtml(String(
-      addressObj.storeCity ||
-      addressObj.suburb ||
-      addressObj.city ||
-      ""
-    )),
-    state: String(
-      addressObj.storeState ||
-      addressObj.state ||
-      ""
-    ).toUpperCase(),
-    postcode: String(
-      addressObj.storePostcode ||
-      addressObj.postcode ||
-      ""
+        store.id ||
+        store.storeNumber ||
+        store.locationId ||
+        ""
+    )
+      .trim()
+      .toUpperCase(),
+    storeName: decodeHtml(
+      String(store.storeName || store.name || store.displayName || "")
     ),
+    address: decodeHtml(
+      String(
+        addressObj.storeAddressLine ||
+          addressObj.addressLine1 ||
+          addressObj.address ||
+          ""
+      )
+    ),
+    suburb: decodeHtml(
+      String(addressObj.storeCity || addressObj.suburb || addressObj.city || "")
+    ),
+    state: String(addressObj.storeState || addressObj.state || "").toUpperCase(),
+    postcode: String(addressObj.storePostcode || addressObj.postcode || ""),
     phone: String(
-      contactObj.storeTelephone ||
-      contactObj.phone ||
-      store.phone ||
-      ""
+      contactObj.storeTelephone || contactObj.phone || store.phone || ""
     ),
     lat,
     lng
@@ -469,7 +494,7 @@ function firstNumber(values) {
 
 async function geocodePostcode(postcode) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/postcode/${postcode}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/postcode-v7/${postcode}`);
 
   const cached = await cache.match(cacheKey);
 
@@ -509,7 +534,7 @@ async function geocodePostcode(postcode) {
 
 async function getProduct(sku) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/product-v6?sku=${sku}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/product-v7?sku=${sku}`);
 
   const cached = await cache.match(cacheKey);
 
@@ -533,9 +558,9 @@ async function getProduct(sku) {
   const exact = products.find((product) => {
     const partNumber = String(
       (product.identity && product.identity.partNumber) ||
-      product.partNumber ||
-      product.sku ||
-      ""
+        product.partNumber ||
+        product.sku ||
+        ""
     ).toUpperCase();
 
     return partNumber === sku;
@@ -545,15 +570,17 @@ async function getProduct(sku) {
 
   const product = {
     sku,
-    name: decodeHtml(String(
-      (first && first.identity && first.identity.name) ||
-      (first && first.name) ||
-      sku
-    )),
+    name: decodeHtml(
+      String(
+        (first && first.identity && first.identity.name) ||
+          (first && first.name) ||
+          sku
+      )
+    ),
     partNumber: String(
       (first && first.identity && first.identity.partNumber) ||
-      (first && first.partNumber) ||
-      sku
+        (first && first.partNumber) ||
+        sku
     ),
     rawFound: Boolean(first)
   };
@@ -571,7 +598,9 @@ async function getProduct(sku) {
 }
 
 async function fetchAvailabilityRaw(storeId, sku) {
-  const url = `${OW.availabilityBase}/${encodeURIComponent(storeId)}?partNumber=${encodeURIComponent(sku)}`;
+  const url = `${OW.availabilityBase}/${encodeURIComponent(
+    storeId
+  )}?partNumber=${encodeURIComponent(sku)}`;
 
   return fetchJson(url, {
     cacheTtl: 0,
@@ -579,18 +608,65 @@ async function fetchAvailabilityRaw(storeId, sku) {
   });
 }
 
-function parseAvailability(raw) {
+function parseAvailabilityLegacyFirst(raw) {
+  const primary = Array.isArray(raw) ? raw[0] : raw;
+
+  const options = Array.isArray(primary && primary.options)
+    ? primary.options
+    : [];
+
+  const simplifiedOptions = options.map((option) => ({
+    type: String(option.type || ""),
+    qty: parseQty(option.qty),
+    rawQty: option.qty,
+    deliveryMethod: option.deliveryMethod || option.fulfilmentType || option.fulfillmentType || "",
+    status: option.status || option.availability || ""
+  }));
+
+  const inStoreOption = options.find((option) => {
+    return String(option.type || "").toLowerCase() === "instore";
+  });
+
+  if (inStoreOption) {
+    const qty = parseQty(inStoreOption.qty);
+
+    return {
+      qty: qty === null ? 0 : qty,
+      status: qty !== null && qty > 0 ? "in_stock" : "no_stock",
+      source: "legacy:availability[0].options[type=inStore].qty",
+      rawSignal: `inStore qty=${qty === null ? "null" : qty}`,
+      options: simplifiedOptions
+    };
+  }
+
+  const lowerTypeStoreOption = options.find((option) => {
+    const type = String(option.type || "").toLowerCase();
+    return type.includes("store") || type.includes("pickup") || type.includes("collect");
+  });
+
+  if (lowerTypeStoreOption) {
+    const qty = parseQty(lowerTypeStoreOption.qty);
+
+    return {
+      qty: qty === null ? 0 : qty,
+      status: qty !== null && qty > 0 ? "in_stock" : "no_stock",
+      source: "fallback:store-like option qty",
+      rawSignal: `store-like option qty=${qty === null ? "null" : qty}`,
+      options: simplifiedOptions
+    };
+  }
+
+  return parseAvailabilityRecursiveFallback(raw, simplifiedOptions);
+}
+
+function parseAvailabilityRecursiveFallback(raw, simplifiedOptions) {
   const objects = flattenObjects(raw);
 
   let bestQty = 0;
   let sawQty = false;
-  let sawPositiveBoolean = false;
-  let sawStoreRelevant = false;
   const signals = [];
 
   for (const obj of objects) {
-    const jsonText = JSON.stringify(obj).toLowerCase();
-
     const typeText = [
       obj.type,
       obj.fulfilmentType,
@@ -600,20 +676,22 @@ function parseAvailability(raw) {
       obj.option,
       obj.name,
       obj.label
-    ].map((x) => String(x || "").toLowerCase()).join(" ");
+    ]
+      .map((x) => String(x || "").toLowerCase())
+      .join(" ");
+
+    const jsonText = JSON.stringify(obj).toLowerCase();
 
     const storeRelevant =
       typeText.includes("store") ||
       typeText.includes("pickup") ||
       typeText.includes("collect") ||
-      jsonText.includes("in-store") ||
       jsonText.includes("instore") ||
+      jsonText.includes("in-store") ||
       jsonText.includes("click and collect") ||
       jsonText.includes("pickup");
 
-    if (storeRelevant) {
-      sawStoreRelevant = true;
-    }
+    if (!storeRelevant) continue;
 
     const qtyKeys = [
       "qty",
@@ -644,56 +722,14 @@ function parseAvailability(raw) {
         }
       }
     }
-
-    const booleanKeys = [
-      "available",
-      "isAvailable",
-      "inStock",
-      "isInStock",
-      "canCollect",
-      "isCollectable",
-      "collectAvailable",
-      "pickupAvailable"
-    ];
-
-    for (const key of booleanKeys) {
-      if (obj[key] === true) {
-        sawPositiveBoolean = true;
-        signals.push(`${key}:true`);
-      }
-    }
-
-    if (
-      jsonText.includes('"status":"available"') ||
-      jsonText.includes('"availability":"available"') ||
-      jsonText.includes("available today") ||
-      jsonText.includes("in stock")
-    ) {
-      sawPositiveBoolean = true;
-      signals.push("text:available");
-    }
-  }
-
-  if (bestQty > 0) {
-    return {
-      qty: bestQty,
-      status: "in_stock",
-      rawSignal: uniqueSignals(signals).join(", ")
-    };
-  }
-
-  if (!sawQty && sawPositiveBoolean && sawStoreRelevant) {
-    return {
-      qty: null,
-      status: "in_stock",
-      rawSignal: uniqueSignals(signals).join(", ") || "available boolean signal"
-    };
   }
 
   return {
     qty: sawQty ? bestQty : 0,
-    status: "no_stock",
-    rawSignal: uniqueSignals(signals).join(", ")
+    status: sawQty && bestQty > 0 ? "in_stock" : "no_stock",
+    source: "recursive-store-fallback",
+    rawSignal: uniqueSignals(signals).join(", "),
+    options: simplifiedOptions
   };
 }
 
@@ -728,14 +764,19 @@ function parseQty(value) {
   }
 
   if (typeof value === "string") {
-    const direct = Number(value.trim());
+    const trimmed = value.trim();
+
+    if (!trimmed) return null;
+
+    const direct = Number(trimmed);
 
     if (Number.isFinite(direct)) return direct;
 
-    const match = value.match(/\d+/);
+    const match = trimmed.match(/\d+/);
 
     if (match) {
       const n = Number(match[0]);
+
       if (Number.isFinite(n)) return n;
     }
   }
@@ -749,9 +790,9 @@ function uniqueSignals(signals) {
 
 function stockSortValue(row) {
   if (!row) return 0;
-  if (row.status === "in_stock" && (row.qty === null || typeof row.qty === "undefined")) return 1;
 
   const qty = Number(row.qty || 0);
+
   return Number.isFinite(qty) ? qty : 0;
 }
 
@@ -763,12 +804,14 @@ async function fetchJson(url, options = {}) {
     method: "GET",
     headers: {
       "Accept": "application/json,text/plain,*/*",
-      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/6.0",
-      "Referer": "https://www.officeworks.com.au/"
+      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/7.0",
+      "Referer": "https://www.officeworks.com.au/",
+      "Origin": "https://www.officeworks.com.au"
     },
-    cf: cacheTtl > 0
-      ? { cacheTtl, cacheEverything: true }
-      : { cacheTtl: 0 }
+    cf:
+      cacheTtl > 0
+        ? { cacheTtl, cacheEverything: true }
+        : { cacheTtl: 0 }
   });
 
   const text = await response.text();
@@ -809,9 +852,9 @@ function distanceKm(lat1, lng1, lat2, lng2) {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(deg2rad(lat1)) *
-    Math.cos(deg2rad(lat2)) *
-    Math.sin(dLng / 2) *
-    Math.sin(dLng / 2);
+      Math.cos(deg2rad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
 
   return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

@@ -311,7 +311,7 @@
     <h1>Check Officeworks stock by store.</h1>
 
     <p class="sub">
-      输入 Officeworks 产品链接或 SKU，选择州、postcode 和半径。若门店 API 没有坐标，会自动切换为 postcode 排序模式，不会再把门店全部过滤掉。
+      当前版本会先解析 Officeworks 可见产品代码，再尝试找到 availability API 真正接受的 stock partNumber。
     </p>
 
     <section class="card panel">
@@ -347,9 +347,8 @@
       <div class="hint">
         API endpoint: <code id="apiBaseText">detecting...</code>
         <br />
-        Debug:
-        <code>/api/stores?state=all&postcode=3000&radiusKm=200</code>,
-        <code>/api/raw?sku=JBAALR618B&storeId=STORE_ID</code>
+        Raw debug:
+        <code>/api/raw?sku=JBAALR618B&storeId=W345</code>
       </div>
     </section>
 
@@ -545,6 +544,7 @@
         return `${row.qty} in stock`;
       }
 
+      if (row.status === "invalid_part_number") return "Invalid code";
       if (row.status === "no_stock") return "No stock";
 
       return "Unknown";
@@ -703,10 +703,10 @@
             row.state,
             row.postcode,
             row.phone,
-            row.storeId
-          ]
-            .join(" ")
-            .toLowerCase();
+            row.storeId,
+            row.visibleSku,
+            row.stockPartNumber
+          ].join(" ").toLowerCase();
 
           return haystack.includes(q);
         });
@@ -745,14 +745,14 @@
               ? `<br />Distance: ${escapeHtml(row.distanceKm)} km`
               : "";
 
-          const distanceSource = row.distanceSource
-            ? `<br />Distance source: ${escapeHtml(row.distanceSource)}`
-            : "";
-
           const postcodeScore =
             typeof row.postcodeScore === "number"
               ? `<br />Postcode score: ${escapeHtml(row.postcodeScore)}`
               : "";
+
+          const partNumber = row.stockPartNumber
+            ? `<br />Stock partNumber: ${escapeHtml(row.stockPartNumber)}`
+            : "";
 
           const source = row.source
             ? `<br />Stock source: ${escapeHtml(row.source)}`
@@ -782,8 +782,8 @@
                   ${row.phone ? `<br />Phone: ${escapeHtml(row.phone)}` : ""}
                   ${row.storeId ? `<br />Store ID: ${escapeHtml(row.storeId)}` : ""}
                   ${distance}
-                  ${distanceSource}
                   ${postcodeScore}
+                  ${partNumber}
                   ${source}
                   ${signal}
                   ${optionSummary}
@@ -799,96 +799,15 @@
 
     function sortDistance(row) {
       if (!row) return 999999;
-
       if (typeof row.distanceKm === "number") return row.distanceKm;
       if (typeof row.postcodeScore === "number") return row.postcodeScore;
-
       return 999999;
     }
 
     function stockSort(row) {
       if (!row) return 0;
-
       const qty = Number(row.qty || 0);
-
       return Number.isFinite(qty) ? qty : 0;
-    }
-
-    function exportCsv() {
-      if (!lastRows.length) return;
-
-      const sku =
-        lastData && lastData.product
-          ? lastData.product.sku
-          : extractSku(productInput.value);
-
-      const productName =
-        lastData && lastData.product ? lastData.product.name : "";
-
-      const headers = [
-        "SKU",
-        "Product",
-        "Store ID",
-        "Store Name",
-        "Address",
-        "Suburb",
-        "State",
-        "Postcode",
-        "Phone",
-        "DistanceKm",
-        "DistanceSource",
-        "PostcodeScore",
-        "Qty",
-        "Status",
-        "Source",
-        "Signal",
-        "Error"
-      ];
-
-      const lines = [
-        headers.join(","),
-        ...lastRows.map((row) =>
-          [
-            sku,
-            productName,
-            row.storeId,
-            row.storeName,
-            row.address,
-            row.suburb,
-            row.state,
-            row.postcode,
-            row.phone,
-            row.distanceKm,
-            row.distanceSource,
-            row.postcodeScore,
-            row.qty,
-            row.status,
-            row.source,
-            row.rawSignal,
-            row.error
-          ]
-            .map(csvCell)
-            .join(",")
-        )
-      ];
-
-      const blob = new Blob([lines.join("\n")], {
-        type: "text/csv;charset=utf-8"
-      });
-
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `officeworks-stock-${sku}.csv`;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      URL.revokeObjectURL(link.href);
-    }
-
-    function csvCell(value) {
-      return `"${String(value ?? "").replaceAll('"', '""')}"`;
     }
 
     function sleep(ms) {
@@ -896,15 +815,12 @@
     }
 
     searchBtn.addEventListener("click", runSearch);
-
     productInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") runSearch();
     });
-
     filterInput.addEventListener("input", renderRows);
     sortInput.addEventListener("change", renderRows);
     inStockOnly.addEventListener("change", renderRows);
-    csvBtn.addEventListener("click", exportCsv);
 
     const params = new URLSearchParams(window.location.search);
 

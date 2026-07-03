@@ -21,9 +21,7 @@
       --radius: 24px;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -92,20 +90,14 @@
     }
 
     @media (max-width: 980px) {
-      .search-grid {
-        grid-template-columns: 1fr 1fr;
-      }
+      .search-grid { grid-template-columns: 1fr 1fr; }
     }
 
     @media (max-width: 560px) {
-      .search-grid {
-        grid-template-columns: 1fr;
-      }
+      .search-grid { grid-template-columns: 1fr; }
     }
 
-    input,
-    select,
-    button {
+    input, select, button {
       width: 100%;
       min-height: 52px;
       border-radius: 16px;
@@ -116,8 +108,7 @@
       outline: none;
     }
 
-    input:focus,
-    select:focus {
+    input:focus, select:focus {
       border-color: rgba(37,99,235,.55);
       box-shadow: 0 0 0 4px rgba(37,99,235,.12);
     }
@@ -149,9 +140,7 @@
       overflow-wrap: anywhere;
     }
 
-    .status.show {
-      display: block;
-    }
+    .status.show { display: block; }
 
     .error {
       color: var(--red);
@@ -176,25 +165,19 @@
 
     .summary {
       display: none;
-      grid-template-columns: 1.4fr repeat(4, 1fr);
+      grid-template-columns: 1.4fr repeat(5, 1fr);
       gap: 12px;
       margin-top: 16px;
     }
 
-    .summary.show {
-      display: grid;
-    }
+    .summary.show { display: grid; }
 
-    @media (max-width: 920px) {
-      .summary {
-        grid-template-columns: repeat(2, 1fr);
-      }
+    @media (max-width: 1080px) {
+      .summary { grid-template-columns: repeat(2, 1fr); }
     }
 
     @media (max-width: 560px) {
-      .summary {
-        grid-template-columns: 1fr;
-      }
+      .summary { grid-template-columns: 1fr; }
     }
 
     .metric {
@@ -220,6 +203,12 @@
       font-weight: 900;
     }
 
+    .small-value {
+      font-size: 14px;
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
     .toolbar {
       display: none;
       grid-template-columns: 1fr 180px 160px 160px;
@@ -227,20 +216,14 @@
       margin-top: 16px;
     }
 
-    .toolbar.show {
-      display: grid;
-    }
+    .toolbar.show { display: grid; }
 
     @media (max-width: 840px) {
-      .toolbar {
-        grid-template-columns: 1fr 1fr;
-      }
+      .toolbar { grid-template-columns: 1fr 1fr; }
     }
 
     @media (max-width: 560px) {
-      .toolbar {
-        grid-template-columns: 1fr;
-      }
+      .toolbar { grid-template-columns: 1fr; }
     }
 
     .checkbox-line {
@@ -275,9 +258,7 @@
     }
 
     @media (max-width: 660px) {
-      .store {
-        grid-template-columns: 1fr;
-      }
+      .store { grid-template-columns: 1fr; }
     }
 
     .store h3 {
@@ -303,26 +284,10 @@
       white-space: nowrap;
     }
 
-    .stock-ok {
-      background: rgba(22,163,74,.12);
-      color: var(--green);
-    }
-
-    .stock-low {
-      background: rgba(249,115,22,.14);
-      color: var(--orange);
-    }
-
-    .stock-none {
-      background: rgba(220,38,38,.10);
-      color: var(--red);
-    }
-
-    .stock-error,
-    .stock-unknown {
-      background: rgba(107,114,128,.12);
-      color: #374151;
-    }
+    .stock-ok { background: rgba(22,163,74,.12); color: var(--green); }
+    .stock-low { background: rgba(249,115,22,.14); color: var(--orange); }
+    .stock-none { background: rgba(220,38,38,.10); color: var(--red); }
+    .stock-error, .stock-unknown { background: rgba(107,114,128,.12); color: #374151; }
 
     .footer {
       margin-top: 24px;
@@ -346,7 +311,7 @@
     <h1>Check Officeworks stock by store.</h1>
 
     <p class="sub">
-      输入 Officeworks 产品链接或 SKU，选择州、postcode 和半径，即可优先查询附近门店库存。当前版本改为 Officeworks legacy inStore qty 解析方式。
+      输入 Officeworks 产品链接或 SKU，选择州、postcode 和半径。若门店 API 没有坐标，会自动切换为 postcode 排序模式，不会再把门店全部过滤掉。
     </p>
 
     <section class="card panel">
@@ -365,15 +330,15 @@
           <option value="WA">WA</option>
         </select>
 
-        <input id="postcodeInput" placeholder="Postcode" value="3163" />
+        <input id="postcodeInput" placeholder="Postcode" value="3000" />
 
         <select id="radiusInput">
           <option value="5">5 km</option>
           <option value="10">10 km</option>
-          <option value="25" selected>25 km</option>
+          <option value="25">25 km</option>
           <option value="50">50 km</option>
           <option value="100">100 km</option>
-          <option value="200">200 km</option>
+          <option value="200" selected>200 km</option>
         </select>
 
         <button id="searchBtn">Check stock</button>
@@ -383,8 +348,7 @@
         API endpoint: <code id="apiBaseText">detecting...</code>
         <br />
         Debug:
-        <code>/api/store-search?query=Carnegie</code>
-        then
+        <code>/api/stores?state=all&postcode=3000&radiusKm=200</code>,
         <code>/api/raw?sku=JBAALR618B&storeId=STORE_ID</code>
       </div>
     </section>
@@ -419,13 +383,18 @@
         <div class="label">Lookup errors</div>
         <div id="lookupErrors" class="num">0</div>
       </div>
+
+      <div class="card metric">
+        <div class="label">Filter mode</div>
+        <div id="filterMode" class="small-value">—</div>
+      </div>
     </section>
 
     <section id="toolbar" class="toolbar">
       <input id="filterInput" placeholder="Filter store, suburb, postcode..." />
 
       <select id="sortInput">
-        <option value="distance-asc">Distance nearest</option>
+        <option value="distance-asc">Nearby / postcode priority</option>
         <option value="stock-desc">Stock high to low</option>
         <option value="name-asc">Store A to Z</option>
       </select>
@@ -537,9 +506,7 @@
 
       const response = await fetch(target, {
         method: "GET",
-        headers: {
-          "Accept": "application/json"
-        }
+        headers: { "Accept": "application/json" }
       });
 
       const text = await response.text();
@@ -564,19 +531,9 @@
 
     function stockClass(row) {
       if (!row || row.status === "error") return "stock-error";
-
-      if (row.status === "in_stock" && Number(row.qty || 0) >= 5) {
-        return "stock-ok";
-      }
-
-      if (row.status === "in_stock") {
-        return "stock-low";
-      }
-
-      if (row.status === "no_stock") {
-        return "stock-none";
-      }
-
+      if (row.status === "in_stock" && Number(row.qty || 0) >= 5) return "stock-ok";
+      if (row.status === "in_stock") return "stock-low";
+      if (row.status === "no_stock") return "stock-none";
       return "stock-unknown";
     }
 
@@ -625,6 +582,7 @@
         let hasMore = true;
         let totalStores = null;
         let product = null;
+        let filterMode = "—";
         let batch = 0;
 
         while (hasMore) {
@@ -649,6 +607,7 @@
           const data = await apiGet(`/api/check?${query.toString()}`);
 
           if (!product) product = data.product;
+          filterMode = data.filterMode || "—";
 
           const rows = Array.isArray(data.rows) ? data.rows : [];
           lastRows.push(...rows);
@@ -670,10 +629,11 @@
             state,
             postcode,
             radiusKm,
+            filterMode,
             rows: lastRows
           };
 
-          updateSummary(product, lastRows);
+          updateSummary(product, lastRows, filterMode);
           summaryBox.classList.add("show");
           toolbar.classList.add("show");
           renderRows();
@@ -684,7 +644,7 @@
               : 50;
 
           setStatus(
-            `Checked ${Math.min(offset, totalStores)}/${totalStores} stores.`,
+            `Checked ${Math.min(offset, totalStores)}/${totalStores} stores. Mode: ${filterMode}.`,
             false,
             progress
           );
@@ -701,7 +661,7 @@
       }
     }
 
-    function updateSummary(product, rows) {
+    function updateSummary(product, rows, filterMode) {
       $("productName").textContent =
         product && product.name ? product.name : extractSku(productInput.value);
 
@@ -719,6 +679,8 @@
       $("lookupErrors").textContent = rows.filter(
         (row) => row.status === "error"
       ).length;
+
+      $("filterMode").textContent = filterMode || "—";
     }
 
     function renderRows() {
@@ -752,8 +714,8 @@
 
       rows.sort((a, b) => {
         if (sort === "distance-asc") {
-          const ad = typeof a.distanceKm === "number" ? a.distanceKm : 999999;
-          const bd = typeof b.distanceKm === "number" ? b.distanceKm : 999999;
+          const ad = sortDistance(a);
+          const bd = sortDistance(b);
           return ad - bd;
         }
 
@@ -783,8 +745,17 @@
               ? `<br />Distance: ${escapeHtml(row.distanceKm)} km`
               : "";
 
+          const distanceSource = row.distanceSource
+            ? `<br />Distance source: ${escapeHtml(row.distanceSource)}`
+            : "";
+
+          const postcodeScore =
+            typeof row.postcodeScore === "number"
+              ? `<br />Postcode score: ${escapeHtml(row.postcodeScore)}`
+              : "";
+
           const source = row.source
-            ? `<br />Source: ${escapeHtml(row.source)}`
+            ? `<br />Stock source: ${escapeHtml(row.source)}`
             : "";
 
           const signal = row.rawSignal
@@ -795,9 +766,10 @@
             ? `<br />Error: ${escapeHtml(row.error)}`
             : "";
 
-          const optionSummary = Array.isArray(row.options) && row.options.length
-            ? `<br />Options: ${escapeHtml(row.options.map((o) => `${o.type}:${o.qty}`).join(" | "))}`
-            : "";
+          const optionSummary =
+            Array.isArray(row.options) && row.options.length
+              ? `<br />Options: ${escapeHtml(row.options.map((o) => `${o.type}:${o.qty}`).join(" | "))}`
+              : "";
 
           return `
             <article class="card store">
@@ -810,6 +782,8 @@
                   ${row.phone ? `<br />Phone: ${escapeHtml(row.phone)}` : ""}
                   ${row.storeId ? `<br />Store ID: ${escapeHtml(row.storeId)}` : ""}
                   ${distance}
+                  ${distanceSource}
+                  ${postcodeScore}
                   ${source}
                   ${signal}
                   ${optionSummary}
@@ -821,6 +795,15 @@
           `;
         })
         .join("");
+    }
+
+    function sortDistance(row) {
+      if (!row) return 999999;
+
+      if (typeof row.distanceKm === "number") return row.distanceKm;
+      if (typeof row.postcodeScore === "number") return row.postcodeScore;
+
+      return 999999;
     }
 
     function stockSort(row) {
@@ -853,6 +836,8 @@
         "Postcode",
         "Phone",
         "DistanceKm",
+        "DistanceSource",
+        "PostcodeScore",
         "Qty",
         "Status",
         "Source",
@@ -874,6 +859,8 @@
             row.postcode,
             row.phone,
             row.distanceKm,
+            row.distanceSource,
+            row.postcodeScore,
             row.qty,
             row.status,
             row.source,

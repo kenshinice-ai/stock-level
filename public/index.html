@@ -157,7 +157,7 @@
 
     .search-grid {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) 135px 130px 130px 150px;
+      grid-template-columns: minmax(260px, 1fr) 135px 130px 155px 150px;
       gap: 12px;
       align-items: center;
     }
@@ -370,7 +370,7 @@
       font-weight: 950;
     }
 
-    .distance-pill {
+    .priority-pill {
       display: inline-flex;
       align-items: center;
       padding: 5px 9px;
@@ -596,7 +596,7 @@
         <span data-i18n="heroLine2">stock by store.</span>
       </h1>
       <p class="sub" data-i18n="subtitle">
-        Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.
+        Search by Officeworks product URL or SKU, then check nearest stores by postcode priority.
       </p>
     </section>
 
@@ -619,12 +619,11 @@
         <input id="postcodeInput" placeholder="Postcode" value="3000" />
 
         <select id="radiusInput">
-          <option value="5">5 km</option>
-          <option value="10">10 km</option>
-          <option value="25">25 km</option>
-          <option value="50">50 km</option>
-          <option value="100">100 km</option>
-          <option value="200" selected>200 km</option>
+          <option value="5" data-i18n="nearest5">Nearest 5</option>
+          <option value="10" data-i18n="nearest10">Nearest 10</option>
+          <option value="20" data-i18n="nearest20" selected>Nearest 20</option>
+          <option value="50" data-i18n="nearest50">Nearest 50</option>
+          <option value="999" data-i18n="allStores">All stores</option>
         </select>
 
         <button id="searchBtn" data-i18n="searchButton">Check stock</button>
@@ -672,7 +671,7 @@
 
       <select id="sortInput">
         <option value="stock-desc" data-i18n="sortStock">Stock high to low</option>
-        <option value="distance-asc" data-i18n="sortNearby">Nearby / postcode priority</option>
+        <option value="distance-asc" data-i18n="sortNearby">Nearest / postcode priority</option>
         <option value="name-asc" data-i18n="sortName">Store A to Z</option>
       </select>
 
@@ -728,7 +727,7 @@
         designer: "Designed by Lee",
         heroLine1: "Check Officeworks",
         heroLine2: "stock by store.",
-        subtitle: "Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.",
+        subtitle: "Search by Officeworks product URL or SKU, then check nearest stores by postcode priority.",
         hint: "Live stock is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.",
         product: "Product",
         storesChecked: "Stores checked",
@@ -736,7 +735,7 @@
         visibleStock: "Visible stock",
         lookupErrors: "Lookup errors",
         sortStock: "Stock high to low",
-        sortNearby: "Nearby / postcode priority",
+        sortNearby: "Nearest / postcode priority",
         sortName: "Store A to Z",
         inStockOnly: "In-stock only",
         exportCsv: "Export CSV",
@@ -747,7 +746,7 @@
         filterPlaceholder: "Filter store, suburb, postcode...",
         inputPlaceholder: "Officeworks URL or SKU, e.g. JBAALR618B",
         noMatchingStores: "No matching stores",
-        noMatchingHint: "Try increasing radius, changing postcode, clearing the filter, or disabling in-stock only.",
+        noMatchingHint: "Try increasing nearest store count, changing postcode, clearing the filter, or disabling in-stock only.",
         enterSku: "Please enter an Officeworks product URL or SKU.",
         checking: "Checking",
         checked: "Checked",
@@ -760,14 +759,20 @@
         inStock: "in stock",
         noStock: "No stock",
         lookupError: "Lookup error",
-        unknown: "Unknown"
+        unknown: "Unknown",
+        nearest5: "Nearest 5",
+        nearest10: "Nearest 10",
+        nearest20: "Nearest 20",
+        nearest50: "Nearest 50",
+        allStores: "All stores",
+        priority: "Priority"
       },
       zh: {
         brand: "📦 Officeworks 库存查询",
         designer: "Designed by Lee",
         heroLine1: "查询 Officeworks",
         heroLine2: "各门店库存。",
-        subtitle: "输入 Officeworks 产品链接或 SKU，通过 postcode、州和范围快速查看附近门店库存。",
+        subtitle: "输入 Officeworks 产品链接或 SKU，通过 postcode 优先级查询附近门店库存。",
         hint: "库存仅供参考，最终以 Officeworks 官网结账、Click & Collect 或门店确认为准。",
         product: "产品",
         storesChecked: "已查询门店",
@@ -775,7 +780,7 @@
         visibleStock: "可见库存",
         lookupErrors: "查询错误",
         sortStock: "库存从高到低",
-        sortNearby: "附近 / postcode 优先",
+        sortNearby: "最近 / postcode 优先",
         sortName: "门店 A-Z",
         inStockOnly: "只看有货",
         exportCsv: "导出 CSV",
@@ -786,7 +791,7 @@
         filterPlaceholder: "筛选门店、suburb、postcode...",
         inputPlaceholder: "Officeworks 链接或 SKU，例如 JBAALR618B",
         noMatchingStores: "没有匹配门店",
-        noMatchingHint: "可以扩大范围、更换 postcode、清空筛选，或关闭只看有货。",
+        noMatchingHint: "可以增加查询门店数量、更换 postcode、清空筛选，或关闭只看有货。",
         enterSku: "请输入 Officeworks 产品链接或 SKU。",
         checking: "正在查询",
         checked: "已查询",
@@ -799,7 +804,13 @@
         inStock: "有货",
         noStock: "无货",
         lookupError: "查询错误",
-        unknown: "未知"
+        unknown: "未知",
+        nearest5: "最近 5 家",
+        nearest10: "最近 10 家",
+        nearest20: "最近 20 家",
+        nearest50: "最近 50 家",
+        allStores: "全部门店",
+        priority: "优先级"
       }
     };
 
@@ -934,9 +945,7 @@
       const qty = Number(row.qty || 0);
 
       if (row.status === "in_stock" && qty > 0) {
-        return currentLang === "zh"
-          ? `${qty} ${t("inStock")}`
-          : `${qty} ${t("inStock")}`;
+        return `${qty} ${t("inStock")}`;
       }
 
       if (row.status === "no_stock") return t("noStock");
@@ -1103,7 +1112,7 @@
 
       rows.sort((a, b) => {
         if (sort === "distance-asc") {
-          return sortDistance(a) - sortDistance(b);
+          return sortPriority(a) - sortPriority(b);
         }
 
         if (sort === "stock-desc") {
@@ -1139,9 +1148,9 @@
             ? `<div><strong>${escapeHtml(t("phone"))}</strong> ${escapeHtml(row.phone)}</div>`
             : "";
 
-          const distance =
-            typeof row.distanceKm === "number"
-              ? `<span class="distance-pill">${escapeHtml(row.distanceKm)} km</span>`
+          const priority =
+            typeof row.postcodeScore === "number" && row.postcodeScore < 999999
+              ? `<span class="priority-pill">${escapeHtml(t("priority"))} ${escapeHtml(row.postcodeScore)}</span>`
               : "";
 
           const inStore = normalNumber(row.inStoreQuantity);
@@ -1153,7 +1162,7 @@
               <div class="store-main">
                 <div class="store-title-row">
                   <h3>${escapeHtml(row.storeName || "Unknown store")}</h3>
-                  ${distance}
+                  ${priority}
                 </div>
 
                 <div class="store-meta">
@@ -1182,9 +1191,8 @@
       return Number.isFinite(n) ? n : 0;
     }
 
-    function sortDistance(row) {
+    function sortPriority(row) {
       if (!row) return 999999;
-      if (typeof row.distanceKm === "number") return row.distanceKm;
       if (typeof row.postcodeScore === "number") return row.postcodeScore;
       return 999999;
     }

@@ -1,4 +1,4 @@
-const VERSION = "2026-07-03-v14-public-safe-allstores";
+const VERSION = "2026-07-03-v10-current-officeworks-api";
 
 const OW = {
   stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
@@ -8,7 +8,7 @@ const OW = {
     "https://www.officeworks.com.au/catalogue-app/api/availabilities/store"
 };
 
-const MAX_BATCH_SIZE = 10;
+const MAX_BATCH_SIZE = 20;
 
 const ALLOWED_STATES = new Set([
   "all",
@@ -71,7 +71,6 @@ async function handleApi(url, path) {
       ok: true,
       version: VERSION,
       service: "officeworks-stock-worker",
-      mode: "Public-safe Officeworks stock checker with preflight and optional all-stores mode",
       currentAvailabilityApi:
         "/catalogue-app/api/availabilities/store/{storeId}/postcode/{postcode}?partNumbers={sku}",
       time: new Date().toISOString()
@@ -84,7 +83,7 @@ async function handleApi(url, path) {
       version: VERSION,
       maxBatchSize: MAX_BATCH_SIZE,
       note:
-        "v14 uses v10's working Officeworks catalogue-app availability API, adds preflight safety, removes fake km radius, and keeps All stores as slower advanced mode.",
+        "v10 uses Officeworks current catalogue-app availability endpoint from captured HAR.",
       endpoints: OW
     });
   }
@@ -92,13 +91,13 @@ async function handleApi(url, path) {
   if (path === "/api/stores") {
     const inputState = normaliseState(url.searchParams.get("state") || "all");
     const postcode = normalisePostcode(url.searchParams.get("postcode"));
-    const maxStores = clampInt(url.searchParams.get("radiusKm"), 1, 999, 10);
+    const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 250, 25);
     const resolvedState = resolveState(inputState, postcode);
 
     const result = await getStores({
       state: resolvedState,
       postcode,
-      maxStores
+      radiusKm
     });
 
     return json({
@@ -107,10 +106,56 @@ async function handleApi(url, path) {
       inputState,
       resolvedState,
       postcode,
-      maxStores,
+      radiusKm,
       count: result.stores.length,
       filterMode: result.filterMode,
       stores: result.stores
+    });
+  }
+
+  if (path === "/api/store-search") {
+    const query = String(url.searchParams.get("query") || "")
+      .trim()
+      .toLowerCase();
+    const inputState = normaliseState(url.searchParams.get("state") || "all");
+    const postcode = normalisePostcode(url.searchParams.get("postcode"));
+    const resolvedState = resolveState(inputState, postcode);
+
+    if (!query) {
+      return json(
+        {
+          ok: false,
+          error: "Missing query. Example: /api/store-search?query=Carnegie"
+        },
+        400
+      );
+    }
+
+    const result = await getStores({ state: resolvedState });
+
+    const stores = result.stores.filter((store) => {
+      const haystack = [
+        store.storeName,
+        store.address,
+        store.suburb,
+        store.state,
+        store.postcode,
+        store.storeId
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+
+    return json({
+      ok: true,
+      version: VERSION,
+      query,
+      inputState,
+      resolvedState,
+      count: stores.length,
+      stores
     });
   }
 
@@ -165,8 +210,8 @@ async function handleApi(url, path) {
   if (path === "/api/check") {
     const sku = normaliseSku(url.searchParams.get("sku"));
     const inputState = normaliseState(url.searchParams.get("state") || "all");
-    const userPostcode = normalisePostcode(url.searchParams.get("postcode"));
-    const maxStores = clampInt(url.searchParams.get("radiusKm"), 1, 999, 10);
+    const postcode = normalisePostcode(url.searchParams.get("postcode"));
+    const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 250, 25);
     const offset = clampInt(url.searchParams.get("offset"), 0, 100000, 0);
     const limit = clampInt(
       url.searchParams.get("limit"),
@@ -174,7 +219,7 @@ async function handleApi(url, path) {
       MAX_BATCH_SIZE,
       MAX_BATCH_SIZE
     );
-    const resolvedState = resolveState(inputState, userPostcode);
+    const resolvedState = resolveState(inputState, postcode);
 
     if (!sku) {
       return json({ ok: false, error: "Missing or invalid sku" }, 400);
@@ -186,126 +231,71 @@ async function handleApi(url, path) {
       getProduct(sku),
       getStores({
         state: resolvedState,
-        postcode: userPostcode,
-        maxStores
+        postcode,
+        radiusKm
       })
     ]);
 
     const stores = storeResult.stores;
     const totalStores = stores.length;
-
-    if (!stores.length) {
-      return json({
-        ok: true,
-        version: VERSION,
-        product,
-        inputState,
-        resolvedState,
-        postcode: userPostcode,
-        maxStores,
-        filterMode: storeResult.filterMode,
-        checkStatus: "no_stores",
-        message: "No stores matched the selected state and postcode settings.",
-        paging: {
-          offset,
-          limit,
-          returned: 0,
-          nextOffset: offset,
-          hasMore: false,
-          totalStores: 0
-        },
-        summary: {
-          storesChecked: 0,
-          storesWithStock: 0,
-          totalVisibleStock: 0,
-          lookupErrors: 0,
-          durationMs: Date.now() - startedAt
-        },
-        rows: []
-      });
-    }
-
     const batchStores = stores.slice(offset, offset + limit);
-    let rows = [];
+    const nextOffset = offset + batchStores.length;
+    const hasMore = nextOffset < totalStores;
 
-    if (offset === 0 && batchStores.length) {
-      const firstStore = batchStores[0];
+    const rows = await mapLimit(batchStores, 4, async (store) => {
+      let parsed = {
+        qty: 0,
+        inStoreQuantity: 0,
+        clickAndCollectQuantity: 0,
+        deliveryQuantity: 0,
+        status: "no_stock",
+        source: "none",
+        rawSignal: ""
+      };
+
+      let error = "";
 
       try {
-        const firstResult = await checkStoreAvailability({
-          store: firstStore,
-          userPostcode,
-          sku
-        });
-
-        rows.push(firstResult);
+        const lookupPostcode = postcode || store.postcode || "3000";
+        const raw = await fetchAvailabilityRaw(store.storeId, lookupPostcode, sku);
+        parsed = parseCurrentAvailability(raw, sku);
       } catch (err) {
-        const errorMessage =
-          err && err.message ? err.message : "Availability lookup failed";
-
-        rows.push(makeErrorRow(firstStore, sku, userPostcode, errorMessage));
-
-        return json({
-          ok: true,
-          version: VERSION,
-          product,
-          inputState,
-          resolvedState,
-          postcode: userPostcode,
-          maxStores,
-          filterMode: storeResult.filterMode,
-          checkStatus: "not_checkable",
-          message:
-            "This product could not be checked reliably through the current Officeworks public availability endpoint.",
-          paging: {
-            offset,
-            limit,
-            returned: rows.length,
-            nextOffset: 0,
-            hasMore: false,
-            totalStores
-          },
-          summary: {
-            storesChecked: rows.length,
-            storesWithStock: 0,
-            totalVisibleStock: 0,
-            lookupErrors: 1,
-            durationMs: Date.now() - startedAt
-          },
-          rows
-        });
+        parsed = {
+          qty: null,
+          inStoreQuantity: null,
+          clickAndCollectQuantity: null,
+          deliveryQuantity: null,
+          status: "error",
+          source: "error",
+          rawSignal: ""
+        };
+        error = err && err.message ? err.message : "Availability lookup failed";
       }
 
-      const remainingStores = batchStores.slice(1);
-
-      const remainingRows = await mapLimit(remainingStores, 2, async (store) => {
-        try {
-          return await checkStoreAvailability({ store, userPostcode, sku });
-        } catch (err) {
-          return makeErrorRow(
-            store,
-            sku,
-            userPostcode,
-            err && err.message ? err.message : "Availability lookup failed"
-          );
-        }
-      });
-
-      rows.push(...remainingRows);
-    } else {
-      rows = await mapLimit(batchStores, 2, async (store) => {
-        try {
-          return await checkStoreAvailability({ store, userPostcode, sku });
-        } catch (err) {
-          return makeErrorRow(
-            store,
-            sku,
-            userPostcode,
-            err && err.message ? err.message : "Availability lookup failed"
-          );
-        }
-      });
-    }
+      return {
+        storeId: store.storeId,
+        storeName: store.storeName,
+        address: store.address,
+        suburb: store.suburb,
+        state: store.state,
+        postcode: store.postcode,
+        phone: store.phone,
+        distanceKm: store.distanceKm,
+        distanceSource: store.distanceSource,
+        postcodeScore: store.postcodeScore,
+        sku,
+        qty: parsed.qty,
+        inStoreQuantity: parsed.inStoreQuantity,
+        clickAndCollectQuantity: parsed.clickAndCollectQuantity,
+        deliveryQuantity: parsed.deliveryQuantity,
+        status: parsed.status,
+        source: parsed.source,
+        rawSignal: parsed.rawSignal,
+        collectEstimation: parsed.collectEstimation,
+        deliveryEstimation: parsed.deliveryEstimation,
+        error
+      };
+    });
 
     rows.sort((a, b) => {
       const ad = sortDistanceValue(a);
@@ -319,9 +309,6 @@ async function handleApi(url, path) {
       return bq - aq || String(a.storeName).localeCompare(String(b.storeName));
     });
 
-    const nextOffset = offset + batchStores.length;
-    const hasMore = nextOffset < totalStores;
-
     const storesWithStock = rows.filter((row) => row.status === "in_stock").length;
     const totalVisibleStock = rows.reduce((sum, row) => {
       const qty = Number(row.qty || 0);
@@ -329,24 +316,15 @@ async function handleApi(url, path) {
     }, 0);
     const lookupErrors = rows.filter((row) => row.status === "error").length;
 
-    let checkStatus = "completed";
-    if (lookupErrors > 0 && lookupErrors < rows.length) {
-      checkStatus = "partial_result";
-    } else if (lookupErrors > 0 && lookupErrors === rows.length) {
-      checkStatus = "not_checkable";
-    }
-
     return json({
       ok: true,
       version: VERSION,
       product,
       inputState,
       resolvedState,
-      postcode: userPostcode,
-      maxStores,
+      postcode,
+      radiusKm,
       filterMode: storeResult.filterMode,
-      checkStatus,
-      message: statusMessage(checkStatus),
       paging: {
         offset,
         limit,
@@ -377,114 +355,6 @@ async function handleApi(url, path) {
   );
 }
 
-async function checkStoreAvailability({ store, userPostcode, sku }) {
-  const result = await fetchAvailabilityWithFallback({
-    storeId: store.storeId,
-    storePostcode: store.postcode,
-    userPostcode,
-    sku
-  });
-
-  const parsed = result.parsed;
-
-  return {
-    storeId: store.storeId,
-    storeName: store.storeName,
-    address: store.address,
-    suburb: store.suburb,
-    state: store.state,
-    postcode: store.postcode,
-    phone: store.phone,
-    lookupPostcode: result.postcodeUsed,
-    distanceKm: null,
-    distanceSource: store.distanceSource,
-    postcodeScore: store.postcodeScore,
-    sku,
-    qty: parsed.qty,
-    inStoreQuantity: parsed.inStoreQuantity,
-    clickAndCollectQuantity: parsed.clickAndCollectQuantity,
-    deliveryQuantity: parsed.deliveryQuantity,
-    status: parsed.status,
-    source: parsed.source,
-    rawSignal: parsed.rawSignal,
-    collectEstimation: parsed.collectEstimation,
-    deliveryEstimation: parsed.deliveryEstimation,
-    error: ""
-  };
-}
-
-function makeErrorRow(store, sku, userPostcode, error) {
-  return {
-    storeId: store.storeId,
-    storeName: store.storeName,
-    address: store.address,
-    suburb: store.suburb,
-    state: store.state,
-    postcode: store.postcode,
-    phone: store.phone,
-    lookupPostcode: store.postcode || userPostcode || "3000",
-    distanceKm: null,
-    distanceSource: store.distanceSource,
-    postcodeScore: store.postcodeScore,
-    sku,
-    qty: null,
-    inStoreQuantity: null,
-    clickAndCollectQuantity: null,
-    deliveryQuantity: null,
-    status: "error",
-    source: "error",
-    rawSignal: "",
-    collectEstimation: "",
-    deliveryEstimation: "",
-    error
-  };
-}
-
-function statusMessage(checkStatus) {
-  if (checkStatus === "not_checkable") {
-    return "This product is not currently checkable through this public stock tool. Please open Officeworks to confirm availability.";
-  }
-
-  if (checkStatus === "partial_result") {
-    return "Some stores could not be checked. Results shown are partial and indicative only.";
-  }
-
-  if (checkStatus === "no_stores") {
-    return "No stores matched the selected state and postcode settings.";
-  }
-
-  return "Check completed. Results are indicative only.";
-}
-
-async function fetchAvailabilityWithFallback({ storeId, storePostcode, userPostcode, sku }) {
-  const candidates = [];
-
-  if (normalisePostcode(storePostcode)) candidates.push(normalisePostcode(storePostcode));
-  if (normalisePostcode(userPostcode)) candidates.push(normalisePostcode(userPostcode));
-  if (!candidates.length) candidates.push("3000");
-
-  const uniquePostcodes = Array.from(new Set(candidates));
-
-  let lastError = null;
-
-  for (const postcode of uniquePostcodes) {
-    try {
-      const raw = await fetchAvailabilityRaw(storeId, postcode, sku);
-      const parsed = parseCurrentAvailability(raw, sku);
-
-      return {
-        postcodeUsed: postcode,
-        raw,
-        parsed
-      };
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error("Availability lookup failed");
-}
-
 async function fetchAvailabilityRaw(storeId, postcode, sku) {
   const url =
     `${OW.availabilityBase}/${encodeURIComponent(storeId)}` +
@@ -513,9 +383,7 @@ function parseCurrentAvailability(raw, sku) {
       deliveryQuantity: 0,
       status: "no_stock",
       source: "current:empty-response",
-      rawSignal: "No availability object returned",
-      collectEstimation: "",
-      deliveryEstimation: ""
+      rawSignal: "No availability object returned"
     };
   }
 
@@ -542,7 +410,7 @@ function parseCurrentAvailability(raw, sku) {
 
 async function getProduct(sku) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/product-v14?sku=${sku}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/product-v10?sku=${sku}`);
 
   const cached = await cache.match(cacheKey);
   if (cached) return cached.json();
@@ -601,9 +469,9 @@ async function getProduct(sku) {
   return product;
 }
 
-async function getStores({ state = "all", postcode = "", maxStores = 10 } = {}) {
+async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/stores-v14?state=${state}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/stores-v10?state=${state}`);
 
   let stores;
 
@@ -644,27 +512,20 @@ async function getStores({ state = "all", postcode = "", maxStores = 10 } = {}) 
   }
 
   if (!postcode) {
-    const sliced = maxStores >= 999 ? stores : stores.slice(0, maxStores);
-
     return {
-      stores: sliced.map((store, index) => ({
-        ...store,
-        distanceKm: null,
-        distanceSource: "state-order",
-        postcodeScore: index
-      })),
-      filterMode: maxStores >= 999 ? "all-stores-in-state" : "state-order-limit"
+      stores,
+      filterMode: state === "all" ? "all-states" : "state-only"
     };
   }
 
-  const sortedStores = stores
+  const fallbackStores = stores
     .map((store) => {
       const score = postcodeScore(postcode, store.postcode);
 
       return {
         ...store,
         distanceKm: null,
-        distanceSource: "nearest-postcode-priority",
+        distanceSource: "postcode-sort-fallback",
         postcodeScore: score
       };
     })
@@ -675,11 +536,9 @@ async function getStores({ state = "all", postcode = "", maxStores = 10 } = {}) 
       return as - bs || String(a.storeName).localeCompare(String(b.storeName));
     });
 
-  const limitedStores = maxStores >= 999 ? sortedStores : sortedStores.slice(0, maxStores);
-
   return {
-    stores: limitedStores,
-    filterMode: maxStores >= 999 ? "all-stores-postcode-priority" : "nearest-postcode-priority"
+    stores: fallbackStores,
+    filterMode: "postcode-sort-fallback"
   };
 }
 
@@ -793,6 +652,12 @@ function clampInt(value, min, max, fallback) {
   return Math.max(min, Math.min(max, n));
 }
 
+function clampNumber(value, min, max, fallback) {
+  const n = Number(String(value ?? ""));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
 function parseQty(value) {
   if (value === null || typeof value === "undefined") return null;
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -820,6 +685,7 @@ function stockSortValue(row) {
 
 function sortDistanceValue(row) {
   if (!row) return 999999;
+  if (typeof row.distanceKm === "number") return row.distanceKm;
   if (typeof row.postcodeScore === "number") return row.postcodeScore;
   return 999999;
 }
@@ -832,7 +698,7 @@ async function fetchJson(url, options = {}) {
     method: "GET",
     headers: {
       "Accept": "application/json,text/plain,*/*",
-      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/14.0",
+      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/10.0",
       "Referer": "https://www.officeworks.com.au/",
       "Origin": "https://www.officeworks.com.au"
     },

@@ -22,7 +22,6 @@
       --orange-bg: rgba(249, 115, 22, 0.13);
       --red: #dc2626;
       --red-bg: rgba(220, 38, 38, 0.1);
-      --grey-bg: rgba(100, 116, 139, 0.12);
       --shadow: 0 22px 60px rgba(15, 23, 42, 0.1);
       --shadow-soft: 0 12px 34px rgba(15, 23, 42, 0.08);
       --radius-xl: 30px;
@@ -116,6 +115,11 @@
       font-weight: 900;
     }
 
+    .lang-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+    }
+
     .hero {
       max-width: 960px;
       margin-bottom: 28px;
@@ -153,15 +157,14 @@
 
     .search-grid {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) 135px 130px 175px 150px;
+      grid-template-columns: minmax(260px, 1fr) 135px 130px 130px 150px;
       gap: 12px;
       align-items: center;
     }
 
     input,
     select,
-    button,
-    .link-button {
+    button {
       width: 100%;
       min-height: 54px;
       border-radius: var(--radius-md);
@@ -184,8 +187,7 @@
       box-shadow: 0 0 0 4px rgba(21, 94, 239, 0.1);
     }
 
-    button,
-    .link-button {
+    button {
       border: none;
       cursor: pointer;
       color: white;
@@ -194,23 +196,11 @@
       background: linear-gradient(135deg, var(--blue), var(--blue-dark));
       box-shadow: 0 14px 28px rgba(21, 94, 239, 0.26);
       transition: transform 0.14s ease, opacity 0.14s ease, box-shadow 0.14s ease;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
     }
 
-    .link-button.secondary {
-      background: rgba(255, 255, 255, 0.92);
-      color: var(--text);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow-soft);
-    }
-
-    button:hover,
-    .link-button:hover {
+    button:hover {
       transform: translateY(-1px);
+      box-shadow: 0 18px 34px rgba(21, 94, 239, 0.3);
     }
 
     button:disabled {
@@ -246,11 +236,6 @@
 
     .error {
       color: var(--red);
-      font-weight: 900;
-    }
-
-    .warning {
-      color: var(--orange);
       font-weight: 900;
     }
 
@@ -313,16 +298,9 @@
       letter-spacing: -0.03em;
     }
 
-    .status-value {
-      font-size: 18px;
-      line-height: 1.2;
-      font-weight: 950;
-      letter-spacing: -0.03em;
-    }
-
     .toolbar {
       display: none;
-      grid-template-columns: minmax(260px, 1fr) 190px 165px 145px 175px;
+      grid-template-columns: minmax(260px, 1fr) 190px 165px 150px;
       gap: 12px;
       margin-top: 16px;
     }
@@ -392,7 +370,7 @@
       font-weight: 950;
     }
 
-    .priority-pill {
+    .distance-pill {
       display: inline-flex;
       align-items: center;
       padding: 5px 9px;
@@ -453,7 +431,7 @@
 
     .stock-error,
     .stock-unknown {
-      background: var(--grey-bg);
+      background: rgba(107, 114, 128, 0.12);
       color: #374151;
     }
 
@@ -571,8 +549,7 @@
       input,
       select,
       button,
-      .checkbox-line,
-      .link-button {
+      .checkbox-line {
         min-height: 52px;
       }
 
@@ -619,7 +596,7 @@
         <span data-i18n="heroLine2">stock by store.</span>
       </h1>
       <p class="sub" data-i18n="subtitle">
-        A lightweight public stock checker for supported Officeworks products. Results are indicative only.
+        Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.
       </p>
     </section>
 
@@ -642,17 +619,19 @@
         <input id="postcodeInput" placeholder="Postcode" value="3000" />
 
         <select id="radiusInput">
-          <option value="5" data-i18n="quick5">Quick — 5 stores</option>
-          <option value="10" data-i18n="standard10" selected>Standard — 10 stores</option>
-          <option value="20" data-i18n="extended20">Extended — 20 stores</option>
-          <option value="999" data-i18n="allStores">All stores — slower</option>
+          <option value="5">5 km</option>
+          <option value="10">10 km</option>
+          <option value="25">25 km</option>
+          <option value="50">50 km</option>
+          <option value="100">100 km</option>
+          <option value="200" selected>200 km</option>
         </select>
 
         <button id="searchBtn" data-i18n="searchButton">Check stock</button>
       </div>
 
       <div class="hint" data-i18n="hint">
-        Availability varies by product. If this public tool cannot verify a product, please open Officeworks to confirm.
+        Live stock is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.
       </div>
     </section>
 
@@ -683,8 +662,8 @@
       </div>
 
       <div class="metric">
-        <div class="metric-label" data-i18n="checkStatus">Status</div>
-        <div id="checkStatusValue" class="status-value">Ready</div>
+        <div class="metric-label" data-i18n="lookupErrors">Lookup errors</div>
+        <div id="lookupErrors" class="metric-value">0</div>
       </div>
     </section>
 
@@ -693,7 +672,7 @@
 
       <select id="sortInput">
         <option value="stock-desc" data-i18n="sortStock">Stock high to low</option>
-        <option value="distance-asc" data-i18n="sortNearby">Nearest / postcode priority</option>
+        <option value="distance-asc" data-i18n="sortNearby">Nearby / postcode priority</option>
         <option value="name-asc" data-i18n="sortName">Store A to Z</option>
       </select>
 
@@ -703,10 +682,6 @@
       </label>
 
       <button id="csvBtn" data-i18n="exportCsv">Export CSV</button>
-
-      <a id="officialLink" class="link-button secondary" href="https://www.officeworks.com.au/" target="_blank" rel="noopener" data-i18n="openOfficeworks">
-        Open Officeworks
-      </a>
     </section>
 
     <section id="results" class="results"></section>
@@ -719,7 +694,7 @@
 
   <script>
     const WORKER_ORIGIN = "https://stock-level.lee-liu-melbourne.workers.dev";
-    const BATCH_LIMIT = 10;
+    const BATCH_LIMIT = 20;
 
     const API_BASE = location.hostname.endsWith("workers.dev")
       ? ""
@@ -742,12 +717,10 @@
     const sortInput = $("sortInput");
     const inStockOnly = $("inStockOnly");
     const csvBtn = $("csvBtn");
-    const officialLink = $("officialLink");
 
     let lastData = null;
     let lastRows = [];
     let currentLang = localStorage.getItem("owStockLang") || "en";
-    let currentCheckStatus = "ready";
 
     const I18N = {
       en: {
@@ -755,19 +728,18 @@
         designer: "Designed by Lee",
         heroLine1: "Check Officeworks",
         heroLine2: "stock by store.",
-        subtitle: "A lightweight public stock checker for supported Officeworks products. Results are indicative only.",
-        hint: "Availability varies by product. If this public tool cannot verify a product, please open Officeworks to confirm.",
+        subtitle: "Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.",
+        hint: "Live stock is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.",
         product: "Product",
         storesChecked: "Stores checked",
         storesWithStock: "Stores with stock",
         visibleStock: "Visible stock",
-        checkStatus: "Status",
+        lookupErrors: "Lookup errors",
         sortStock: "Stock high to low",
-        sortNearby: "Nearest / postcode priority",
+        sortNearby: "Nearby / postcode priority",
         sortName: "Store A to Z",
         inStockOnly: "In-stock only",
         exportCsv: "Export CSV",
-        openOfficeworks: "Open Officeworks",
         footerDesign: "Designed by Lee.",
         footerNote: "This tool is not affiliated with Officeworks.",
         langButton: "中文",
@@ -775,7 +747,7 @@
         filterPlaceholder: "Filter store, suburb, postcode...",
         inputPlaceholder: "Officeworks URL or SKU, e.g. JBAALR618B",
         noMatchingStores: "No matching stores",
-        noMatchingHint: "Try changing postcode, clearing the filter, or disabling in-stock only.",
+        noMatchingHint: "Try increasing radius, changing postcode, clearing the filter, or disabling in-stock only.",
         enterSku: "Please enter an Officeworks product URL or SKU.",
         checking: "Checking",
         checked: "Checked",
@@ -787,41 +759,26 @@
         delivery: "Delivery",
         inStock: "in stock",
         noStock: "No stock",
-        notCheckable: "Not checkable",
-        lookupError: "Not checkable",
-        unknown: "Unknown",
-        quick5: "Quick — 5 stores",
-        standard10: "Standard — 10 stores",
-        extended20: "Extended — 20 stores",
-        allStores: "All stores — slower",
-        priority: "Priority",
-        ready: "Ready",
-        checkingStatus: "Checking",
-        completed: "Completed",
-        partialResult: "Partial result",
-        notCheckableStatus: "Not checkable",
-        noStores: "No stores",
-        notCheckableMessage: "This product is not currently checkable through this public stock tool. Please open Officeworks to confirm availability.",
-        partialMessage: "Some stores could not be checked. Results shown are partial and indicative only."
+        lookupError: "Lookup error",
+        unknown: "Unknown"
       },
       zh: {
         brand: "📦 Officeworks 库存查询",
         designer: "Designed by Lee",
         heroLine1: "查询 Officeworks",
         heroLine2: "各门店库存。",
-        subtitle: "一个轻量的 Officeworks 公开库存查询工具。仅支持部分产品，结果仅供参考。",
-        hint: "不同产品的可查询性可能不同。如果本工具无法验证，请打开 Officeworks 官网确认。",
+        subtitle: "输入 Officeworks 产品链接或 SKU，通过 postcode、州和范围快速查看附近门店库存。",
+        hint: "库存仅供参考，最终以 Officeworks 官网结账、Click & Collect 或门店确认为准。",
         product: "产品",
         storesChecked: "已查询门店",
         storesWithStock: "有货门店",
         visibleStock: "可见库存",
-        checkStatus: "状态",
+        lookupErrors: "查询错误",
         sortStock: "库存从高到低",
-        sortNearby: "最近 / postcode 优先",
+        sortNearby: "附近 / postcode 优先",
         sortName: "门店 A-Z",
         inStockOnly: "只看有货",
         exportCsv: "导出 CSV",
-        openOfficeworks: "打开 Officeworks",
         footerDesign: "Designed by Lee.",
         footerNote: "本工具与 Officeworks 无官方关联。",
         langButton: "EN",
@@ -829,7 +786,7 @@
         filterPlaceholder: "筛选门店、suburb、postcode...",
         inputPlaceholder: "Officeworks 链接或 SKU，例如 JBAALR618B",
         noMatchingStores: "没有匹配门店",
-        noMatchingHint: "可以更换 postcode、清空筛选，或关闭只看有货。",
+        noMatchingHint: "可以扩大范围、更换 postcode、清空筛选，或关闭只看有货。",
         enterSku: "请输入 Officeworks 产品链接或 SKU。",
         checking: "正在查询",
         checked: "已查询",
@@ -841,22 +798,8 @@
         delivery: "Delivery 物流",
         inStock: "有货",
         noStock: "无货",
-        notCheckable: "暂不可查",
-        lookupError: "暂不可查",
-        unknown: "未知",
-        quick5: "快速 — 5 家",
-        standard10: "标准 — 10 家",
-        extended20: "扩展 — 20 家",
-        allStores: "全部门店 — 较慢",
-        priority: "优先级",
-        ready: "准备查询",
-        checkingStatus: "查询中",
-        completed: "已完成",
-        partialResult: "部分结果",
-        notCheckableStatus: "暂不可查",
-        noStores: "无门店",
-        notCheckableMessage: "该产品目前无法通过此公开工具稳定查询库存。请打开 Officeworks 官网确认。",
-        partialMessage: "部分门店无法查询，当前结果仅供参考。"
+        lookupError: "查询错误",
+        unknown: "未知"
       }
     };
 
@@ -876,7 +819,7 @@
       searchBtn.textContent = t("searchButton");
       productInput.placeholder = t("inputPlaceholder");
       filterInput.placeholder = t("filterPlaceholder");
-      updateStatusMetric(currentCheckStatus);
+
       renderRows();
     }
 
@@ -895,16 +838,12 @@
         .replaceAll("'", "&#039;");
     }
 
-    function setStatus(message, isError = false, progress = null, isWarning = false) {
+    function setStatus(message, isError = false, progress = null) {
       statusBox.classList.add("show");
 
-      if (isError) {
-        statusText.innerHTML = `<span class="error">${escapeHtml(message)}</span>`;
-      } else if (isWarning) {
-        statusText.innerHTML = `<span class="warning">${escapeHtml(message)}</span>`;
-      } else {
-        statusText.textContent = message;
-      }
+      statusText.innerHTML = isError
+        ? `<span class="error">${escapeHtml(message)}</span>`
+        : escapeHtml(message);
 
       if (typeof progress === "number") {
         progressBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
@@ -944,19 +883,6 @@
       } catch (_) {}
 
       return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    }
-
-    function buildOfficeworksUrl(rawInput, sku) {
-      const raw = String(rawInput || "").trim();
-
-      try {
-        const url = new URL(raw);
-        if (url.hostname.includes("officeworks.com.au")) {
-          return raw;
-        }
-      } catch (_) {}
-
-      return `https://www.officeworks.com.au/search?q=${encodeURIComponent(sku)}`;
     }
 
     async function apiGet(path) {
@@ -1008,7 +934,9 @@
       const qty = Number(row.qty || 0);
 
       if (row.status === "in_stock" && qty > 0) {
-        return `${qty} ${t("inStock")}`;
+        return currentLang === "zh"
+          ? `${qty} ${t("inStock")}`
+          : `${qty} ${t("inStock")}`;
       }
 
       if (row.status === "no_stock") return t("noStock");
@@ -1027,16 +955,12 @@
         return;
       }
 
-      officialLink.href = buildOfficeworksUrl(productInput.value, sku);
-
       searchBtn.disabled = true;
       lastData = null;
       lastRows = [];
-      currentCheckStatus = "checking";
       resultsBox.innerHTML = "";
       summaryBox.classList.remove("show");
       toolbar.classList.remove("show");
-      updateStatusMetric("checking");
 
       const pageUrl = new URL(window.location.href);
       pageUrl.searchParams.set("sku", sku);
@@ -1080,8 +1004,6 @@
           const rows = Array.isArray(data.rows) ? data.rows : [];
           lastRows.push(...rows);
 
-          currentCheckStatus = data.checkStatus || "completed";
-
           totalStores =
             data.paging && typeof data.paging.totalStores === "number"
               ? data.paging.totalStores
@@ -1099,11 +1021,10 @@
             state,
             postcode,
             radiusKm,
-            rows: lastRows,
-            checkStatus: currentCheckStatus
+            rows: lastRows
           };
 
-          updateSummary(product, lastRows, currentCheckStatus);
+          updateSummary(product, lastRows);
           summaryBox.classList.add("show");
           toolbar.classList.add("show");
           renderRows();
@@ -1113,39 +1034,25 @@
               ? Math.round((Math.min(offset, totalStores) / totalStores) * 100)
               : 50;
 
-          if (currentCheckStatus === "not_checkable") {
-            setStatus(t("notCheckableMessage"), false, 100, true);
-            break;
-          }
+          setStatus(
+            `${t("checked")} ${Math.min(offset, totalStores)}/${totalStores} ${t("stores")}.`,
+            false,
+            progress
+          );
 
-          if (currentCheckStatus === "partial_result") {
-            setStatus(t("partialMessage"), false, progress, true);
-          } else {
-            setStatus(
-              `${t("checked")} ${Math.min(offset, totalStores)}/${totalStores} ${t("stores")}.`,
-              false,
-              progress
-            );
-          }
-
-          await sleep(120);
+          await sleep(90);
         }
 
-        if (currentCheckStatus === "completed") {
-          hideStatus();
-        }
-
+        hideStatus();
         renderRows();
       } catch (err) {
-        currentCheckStatus = "not_checkable";
-        updateStatusMetric("not_checkable");
         setStatus(err.message || "Something went wrong.", true, 0);
       } finally {
         searchBtn.disabled = false;
       }
     }
 
-    function updateSummary(product, rows, status) {
+    function updateSummary(product, rows) {
       $("productName").textContent =
         product && product.name ? product.name : extractSku(productInput.value);
 
@@ -1160,23 +1067,9 @@
         return Number.isFinite(qty) ? sum + qty : sum;
       }, 0);
 
-      updateStatusMetric(status || currentCheckStatus);
-    }
-
-    function updateStatusMetric(status) {
-      const el = $("checkStatusValue");
-      if (!el) return;
-
-      const map = {
-        ready: t("ready"),
-        checking: t("checkingStatus"),
-        completed: t("completed"),
-        partial_result: t("partialResult"),
-        not_checkable: t("notCheckableStatus"),
-        no_stores: t("noStores")
-      };
-
-      el.textContent = map[status] || t("ready");
+      $("lookupErrors").textContent = rows.filter(
+        (row) => row.status === "error"
+      ).length;
     }
 
     function renderRows() {
@@ -1210,7 +1103,7 @@
 
       rows.sort((a, b) => {
         if (sort === "distance-asc") {
-          return sortPriority(a) - sortPriority(b);
+          return sortDistance(a) - sortDistance(b);
         }
 
         if (sort === "stock-desc") {
@@ -1221,11 +1114,6 @@
       });
 
       if (!rows.length) {
-        const message =
-          currentCheckStatus === "not_checkable"
-            ? t("notCheckableMessage")
-            : t("noMatchingHint");
-
         resultsBox.innerHTML = `
           <article class="store">
             <div class="store-main">
@@ -1233,7 +1121,7 @@
                 <h3>${escapeHtml(t("noMatchingStores"))}</h3>
               </div>
               <div class="store-meta">
-                ${escapeHtml(message)}
+                ${escapeHtml(t("noMatchingHint"))}
               </div>
             </div>
           </article>
@@ -1251,31 +1139,26 @@
             ? `<div><strong>${escapeHtml(t("phone"))}</strong> ${escapeHtml(row.phone)}</div>`
             : "";
 
-          const priority =
-            typeof row.postcodeScore === "number" && row.postcodeScore < 999999
-              ? `<span class="priority-pill">${escapeHtml(t("priority"))} ${escapeHtml(row.postcodeScore)}</span>`
+          const distance =
+            typeof row.distanceKm === "number"
+              ? `<span class="distance-pill">${escapeHtml(row.distanceKm)} km</span>`
               : "";
 
           const inStore = normalNumber(row.inStoreQuantity);
           const clickCollect = normalNumber(row.clickAndCollectQuantity);
           const delivery = normalNumber(row.deliveryQuantity);
 
-          const errorLine = row.error
-            ? `<div><strong>${escapeHtml(t("checkStatus"))}</strong> ${escapeHtml(t("notCheckable"))}</div>`
-            : "";
-
           return `
             <article class="store">
               <div class="store-main">
                 <div class="store-title-row">
                   <h3>${escapeHtml(row.storeName || "Unknown store")}</h3>
-                  ${priority}
+                  ${distance}
                 </div>
 
                 <div class="store-meta">
                   <div><strong>${escapeHtml(t("address"))}</strong> ${escapeHtml(addressLine || "—")}</div>
                   ${phoneLine}
-                  ${errorLine}
                 </div>
               </div>
 
@@ -1299,8 +1182,9 @@
       return Number.isFinite(n) ? n : 0;
     }
 
-    function sortPriority(row) {
+    function sortDistance(row) {
       if (!row) return 999999;
+      if (typeof row.distanceKm === "number") return row.distanceKm;
       if (typeof row.postcodeScore === "number") return row.postcodeScore;
       return 999999;
     }

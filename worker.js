@@ -1,4 +1,4 @@
-const VERSION = "2026-07-03-v12-nearest-store-count";
+const VERSION = "2026-07-03-v13-store-postcode-fallback";
 
 const OW = {
   stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
@@ -74,6 +74,8 @@ async function handleApi(url, path) {
       mode: "Nearest store count by postcode priority",
       currentAvailabilityApi:
         "/catalogue-app/api/availabilities/store/{storeId}/postcode/{postcode}?partNumbers={sku}",
+      fix:
+        "v13 uses each store's own postcode first for availability lookups, then falls back to the user's postcode.",
       time: new Date().toISOString()
     });
   }
@@ -84,7 +86,7 @@ async function handleApi(url, path) {
       version: VERSION,
       maxBatchSize: MAX_BATCH_SIZE,
       note:
-        "v12 replaces fake radius km with stable nearest-store-count mode based on postcode priority.",
+        "v13 fixes lookup errors when checking many stores by using store.postcode first and reducing upstream concurrency.",
       endpoints: OW
     });
   }
@@ -118,6 +120,7 @@ async function handleApi(url, path) {
     const query = String(url.searchParams.get("query") || "")
       .trim()
       .toLowerCase();
+
     const inputState = normaliseState(url.searchParams.get("state") || "all");
     const postcode = normalisePostcode(url.searchParams.get("postcode"));
     const resolvedState = resolveState(inputState, postcode);
@@ -215,7 +218,7 @@ async function handleApi(url, path) {
   if (path === "/api/check") {
     const sku = normaliseSku(url.searchParams.get("sku"));
     const inputState = normaliseState(url.searchParams.get("state") || "all");
-    const postcode = normalisePostcode(url.searchParams.get("postcode"));
+    const userPostcode = normalisePostcode(url.searchParams.get("postcode"));
     const maxStores = clampInt(url.searchParams.get("radiusKm"), 1, 999, 20);
     const offset = clampInt(url.searchParams.get("offset"), 0, 100000, 0);
     const limit = clampInt(
@@ -224,7 +227,7 @@ async function handleApi(url, path) {
       MAX_BATCH_SIZE,
       MAX_BATCH_SIZE
     );
-    const resolvedState = resolveState(inputState, postcode);
+    const resolvedState = resolveState(inputState, userPostcode);
 
     if (!sku) {
       return json({ ok: false, error: "Missing or invalid sku" }, 400);
@@ -236,7 +239,7 @@ async function handleApi(url, path) {
       getProduct(sku),
       getStores({
         state: resolvedState,
-        postcode,
+        postcode: userPostcode,
         maxStores
       })
     ]);
@@ -247,7 +250,7 @@ async function handleApi(url, path) {
     const nextOffset = offset + batchStores.length;
     const hasMore = nextOffset < totalStores;
 
-    const rows = await mapLimit(batchStores, 4, async (store) => {
+    const rows = await mapLimit(batchStores, 2, async (store) => {
       let parsed = {
         qty: 0,
         inStoreQuantity: 0,
@@ -259,11 +262,18 @@ async function handleApi(url, path) {
       };
 
       let error = "";
+      let lookupPostcode = store.postcode || userPostcode || "3000";
 
       try {
-        const lookupPostcode = postcode || store.postcode || "3000";
-        const raw = await fetchAvailabilityRaw(store.storeId, lookupPostcode, sku);
-        parsed = parseCurrentAvailability(raw, sku);
+        const result = await fetchAvailabilityWithFallback({
+          storeId: store.storeId,
+          storePostcode: store.postcode,
+          userPostcode,
+          sku
+        });
+
+        parsed = result.parsed;
+        lookupPostcode = result.postcodeUsed;
       } catch (err) {
         parsed = {
           qty: null,
@@ -285,6 +295,7 @@ async function handleApi(url, path) {
         state: store.state,
         postcode: store.postcode,
         phone: store.phone,
+        lookupPostcode,
         distanceKm: null,
         distanceSource: store.distanceSource,
         postcodeScore: store.postcodeScore,
@@ -327,7 +338,7 @@ async function handleApi(url, path) {
       product,
       inputState,
       resolvedState,
-      postcode,
+      postcode: userPostcode,
       maxStores,
       filterMode: storeResult.filterMode,
       paging: {
@@ -358,6 +369,35 @@ async function handleApi(url, path) {
     },
     404
   );
+}
+
+async function fetchAvailabilityWithFallback({ storeId, storePostcode, userPostcode, sku }) {
+  const candidates = [];
+
+  if (normalisePostcode(storePostcode)) candidates.push(normalisePostcode(storePostcode));
+  if (normalisePostcode(userPostcode)) candidates.push(normalisePostcode(userPostcode));
+  if (!candidates.length) candidates.push("3000");
+
+  const uniquePostcodes = Array.from(new Set(candidates));
+
+  let lastError = null;
+
+  for (const postcode of uniquePostcodes) {
+    try {
+      const raw = await fetchAvailabilityRaw(storeId, postcode, sku);
+      const parsed = parseCurrentAvailability(raw, sku);
+
+      return {
+        postcodeUsed: postcode,
+        raw,
+        parsed
+      };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Availability lookup failed");
 }
 
 async function fetchAvailabilityRaw(storeId, postcode, sku) {
@@ -415,7 +455,7 @@ function parseCurrentAvailability(raw, sku) {
 
 async function getProduct(sku) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/product-v12?sku=${sku}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/product-v13?sku=${sku}`);
 
   const cached = await cache.match(cacheKey);
   if (cached) return cached.json();
@@ -476,7 +516,7 @@ async function getProduct(sku) {
 
 async function getStores({ state = "all", postcode = "", maxStores = 20 } = {}) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/stores-v12?state=${state}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/stores-v13?state=${state}`);
 
   let stores;
 
@@ -666,12 +706,6 @@ function clampInt(value, min, max, fallback) {
   return Math.max(min, Math.min(max, n));
 }
 
-function clampNumber(value, min, max, fallback) {
-  const n = Number(String(value ?? ""));
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, n));
-}
-
 function parseQty(value) {
   if (value === null || typeof value === "undefined") return null;
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -711,7 +745,7 @@ async function fetchJson(url, options = {}) {
     method: "GET",
     headers: {
       "Accept": "application/json,text/plain,*/*",
-      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/12.0",
+      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/13.0",
       "Referer": "https://www.officeworks.com.au/",
       "Origin": "https://www.officeworks.com.au"
     },

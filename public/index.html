@@ -2,18 +2,17 @@
 <html lang="en-AU">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Check Officeworks stock by store - Designed by Lee</title>
   <meta name="description" content="Check Officeworks product stock by store. Designed by Lee." />
 
   <style>
     :root {
       --bg: #eef6fb;
-      --surface: rgba(255, 255, 255, 0.82);
+      --surface: rgba(255, 255, 255, 0.84);
       --surface-solid: #ffffff;
       --text: #0f172a;
       --muted: #64748b;
-      --soft: #f8fafc;
       --border: rgba(148, 163, 184, 0.26);
       --blue: #155eef;
       --blue-dark: #0f3fb6;
@@ -36,6 +35,7 @@
 
     html {
       scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
     }
 
     body {
@@ -60,7 +60,7 @@
     .wrap {
       width: min(1180px, calc(100% - 32px));
       margin: 0 auto;
-      padding: 34px 0 56px;
+      padding: max(22px, env(safe-area-inset-top)) 0 56px;
     }
 
     .topbar {
@@ -85,12 +85,39 @@
       font-size: 13px;
       font-weight: 900;
       letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
     }
 
     .designer {
       color: var(--muted);
       font-size: 13px;
       font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .lang-btn {
+      width: auto;
+      min-height: 36px;
+      padding: 0 13px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--text);
+      box-shadow: none;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .lang-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
     }
 
     .hero {
@@ -147,6 +174,7 @@
       outline: none;
       background: var(--surface-solid);
       color: var(--text);
+      font-family: inherit;
     }
 
     input::placeholder {
@@ -187,14 +215,6 @@
       color: var(--muted);
       font-size: 13px;
       line-height: 1.55;
-    }
-
-    code {
-      padding: 2px 7px;
-      border-radius: 7px;
-      background: rgba(15, 23, 42, 0.06);
-      color: #334155;
-      font-size: 12px;
     }
 
     .status {
@@ -252,7 +272,7 @@
       padding: 18px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: rgba(255, 255, 255, 0.72);
+      background: rgba(255, 255, 255, 0.74);
       box-shadow: var(--shadow-soft);
       backdrop-filter: blur(18px);
     }
@@ -308,6 +328,7 @@
       min-height: 18px;
       padding: 0;
       box-shadow: none;
+      flex-shrink: 0;
     }
 
     .results {
@@ -442,8 +463,23 @@
       color: #334155;
     }
 
-    @media (max-width: 980px) {
-      .search-grid,
+    @media (min-width: 701px) and (max-width: 1080px) {
+      .wrap {
+        width: min(100% - 38px, 980px);
+      }
+
+      .search-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+
+      .search-grid input:first-child {
+        grid-column: span 3;
+      }
+
+      .search-grid button {
+        grid-column: span 3;
+      }
+
       .toolbar {
         grid-template-columns: 1fr 1fr;
       }
@@ -451,17 +487,80 @@
       .summary {
         grid-template-columns: repeat(2, 1fr);
       }
+
+      .summary .metric:first-child {
+        grid-column: span 2;
+      }
+
+      h1 {
+        font-size: clamp(54px, 8vw, 78px);
+      }
     }
 
     @media (max-width: 700px) {
+      .wrap {
+        width: min(100% - 22px, 1180px);
+        padding-top: max(18px, env(safe-area-inset-top));
+        padding-bottom: 42px;
+      }
+
       .topbar {
         align-items: flex-start;
         flex-direction: column;
+        gap: 13px;
         margin-bottom: 30px;
+      }
+
+      .top-actions {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .brand-pill {
+        max-width: 100%;
+        white-space: normal;
+      }
+
+      .hero {
+        margin-bottom: 22px;
+      }
+
+      h1 {
+        font-size: clamp(40px, 12vw, 62px);
+        letter-spacing: -0.065em;
+      }
+
+      .sub {
+        font-size: 15px;
+        line-height: 1.55;
+      }
+
+      .panel {
+        padding: 14px;
+        border-radius: 24px;
+      }
+
+      .search-grid,
+      .toolbar,
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      input,
+      select,
+      button,
+      .checkbox-line {
+        min-height: 52px;
+      }
+
+      .metric,
+      .store {
+        padding: 16px;
       }
 
       .store {
         grid-template-columns: 1fr;
+        gap: 14px;
       }
 
       .stock-block {
@@ -472,31 +571,9 @@
       .stock-mini {
         justify-content: flex-start;
       }
-    }
 
-    @media (max-width: 560px) {
-      .wrap {
-        width: min(100% - 22px, 1180px);
-        padding-top: 22px;
-      }
-
-      .search-grid,
-      .toolbar,
-      .summary {
-        grid-template-columns: 1fr;
-      }
-
-      h1 {
-        font-size: clamp(40px, 12vw, 62px);
-      }
-
-      .panel {
-        padding: 14px;
-      }
-
-      .metric,
-      .store {
-        padding: 16px;
+      .metric-value {
+        font-size: 30px;
       }
     }
   </style>
@@ -505,16 +582,20 @@
 <body>
   <main class="wrap">
     <header class="topbar">
-      <div class="brand-pill">📦 Officeworks Stock Level Checker</div>
-      <div class="designer">Designed by Lee</div>
+      <div class="brand-pill" data-i18n="brand">📦 Officeworks Stock Level Checker</div>
+
+      <div class="top-actions">
+        <button id="langBtn" class="lang-btn" type="button">中文</button>
+        <div class="designer" data-i18n="designer">Designed by Lee</div>
+      </div>
     </header>
 
     <section class="hero">
       <h1>
-        <span>Check Officeworks</span>
-        <span>stock by store.</span>
+        <span data-i18n="heroLine1">Check Officeworks</span>
+        <span data-i18n="heroLine2">stock by store.</span>
       </h1>
-      <p class="sub">
+      <p class="sub" data-i18n="subtitle">
         Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.
       </p>
     </section>
@@ -546,10 +627,10 @@
           <option value="200" selected>200 km</option>
         </select>
 
-        <button id="searchBtn">Check stock</button>
+        <button id="searchBtn" data-i18n="searchButton">Check stock</button>
       </div>
 
-      <div class="hint">
+      <div class="hint" data-i18n="hint">
         Live stock is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.
       </div>
     </section>
@@ -561,27 +642,27 @@
 
     <section id="summary" class="summary">
       <div class="metric">
-        <div class="metric-label">Product</div>
+        <div class="metric-label" data-i18n="product">Product</div>
         <div id="productName" class="product-title">—</div>
       </div>
 
       <div class="metric">
-        <div class="metric-label">Stores checked</div>
+        <div class="metric-label" data-i18n="storesChecked">Stores checked</div>
         <div id="storesChecked" class="metric-value">0</div>
       </div>
 
       <div class="metric">
-        <div class="metric-label">Stores with stock</div>
+        <div class="metric-label" data-i18n="storesWithStock">Stores with stock</div>
         <div id="storesWithStock" class="metric-value">0</div>
       </div>
 
       <div class="metric">
-        <div class="metric-label">Visible stock</div>
+        <div class="metric-label" data-i18n="visibleStock">Visible stock</div>
         <div id="totalStock" class="metric-value">0</div>
       </div>
 
       <div class="metric">
-        <div class="metric-label">Lookup errors</div>
+        <div class="metric-label" data-i18n="lookupErrors">Lookup errors</div>
         <div id="lookupErrors" class="metric-value">0</div>
       </div>
     </section>
@@ -590,23 +671,24 @@
       <input id="filterInput" placeholder="Filter store, suburb, postcode..." />
 
       <select id="sortInput">
-        <option value="stock-desc">Stock high to low</option>
-        <option value="distance-asc">Nearby / postcode priority</option>
-        <option value="name-asc">Store A to Z</option>
+        <option value="stock-desc" data-i18n="sortStock">Stock high to low</option>
+        <option value="distance-asc" data-i18n="sortNearby">Nearby / postcode priority</option>
+        <option value="name-asc" data-i18n="sortName">Store A to Z</option>
       </select>
 
       <label class="checkbox-line">
         <input id="inStockOnly" type="checkbox" checked />
-        In-stock only
+        <span data-i18n="inStockOnly">In-stock only</span>
       </label>
 
-      <button id="csvBtn">Export CSV</button>
+      <button id="csvBtn" data-i18n="exportCsv">Export CSV</button>
     </section>
 
     <section id="results" class="results"></section>
 
     <section class="footer">
-      <strong>Designed by Lee.</strong> This tool is not affiliated with Officeworks.
+      <strong data-i18n="footerDesign">Designed by Lee.</strong>
+      <span data-i18n="footerNote">This tool is not affiliated with Officeworks.</span>
     </section>
   </main>
 
@@ -638,6 +720,114 @@
 
     let lastData = null;
     let lastRows = [];
+    let currentLang = localStorage.getItem("owStockLang") || "en";
+
+    const I18N = {
+      en: {
+        brand: "📦 Officeworks Stock Level Checker",
+        designer: "Designed by Lee",
+        heroLine1: "Check Officeworks",
+        heroLine2: "stock by store.",
+        subtitle: "Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.",
+        hint: "Live stock is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.",
+        product: "Product",
+        storesChecked: "Stores checked",
+        storesWithStock: "Stores with stock",
+        visibleStock: "Visible stock",
+        lookupErrors: "Lookup errors",
+        sortStock: "Stock high to low",
+        sortNearby: "Nearby / postcode priority",
+        sortName: "Store A to Z",
+        inStockOnly: "In-stock only",
+        exportCsv: "Export CSV",
+        footerDesign: "Designed by Lee.",
+        footerNote: "This tool is not affiliated with Officeworks.",
+        langButton: "中文",
+        searchButton: "Check stock",
+        filterPlaceholder: "Filter store, suburb, postcode...",
+        inputPlaceholder: "Officeworks URL or SKU, e.g. JBAALR618B",
+        noMatchingStores: "No matching stores",
+        noMatchingHint: "Try increasing radius, changing postcode, clearing the filter, or disabling in-stock only.",
+        enterSku: "Please enter an Officeworks product URL or SKU.",
+        checking: "Checking",
+        checked: "Checked",
+        stores: "stores",
+        address: "Address",
+        phone: "Phone",
+        store: "Store",
+        clickCollect: "C&C",
+        delivery: "Delivery",
+        inStock: "in stock",
+        noStock: "No stock",
+        lookupError: "Lookup error",
+        unknown: "Unknown"
+      },
+      zh: {
+        brand: "📦 Officeworks 库存查询",
+        designer: "Designed by Lee",
+        heroLine1: "查询 Officeworks",
+        heroLine2: "各门店库存。",
+        subtitle: "输入 Officeworks 产品链接或 SKU，通过 postcode、州和范围快速查看附近门店库存。",
+        hint: "库存仅供参考，最终以 Officeworks 官网结账、Click & Collect 或门店确认为准。",
+        product: "产品",
+        storesChecked: "已查询门店",
+        storesWithStock: "有货门店",
+        visibleStock: "可见库存",
+        lookupErrors: "查询错误",
+        sortStock: "库存从高到低",
+        sortNearby: "附近 / postcode 优先",
+        sortName: "门店 A-Z",
+        inStockOnly: "只看有货",
+        exportCsv: "导出 CSV",
+        footerDesign: "Designed by Lee.",
+        footerNote: "本工具与 Officeworks 无官方关联。",
+        langButton: "EN",
+        searchButton: "查询库存",
+        filterPlaceholder: "筛选门店、suburb、postcode...",
+        inputPlaceholder: "Officeworks 链接或 SKU，例如 JBAALR618B",
+        noMatchingStores: "没有匹配门店",
+        noMatchingHint: "可以扩大范围、更换 postcode、清空筛选，或关闭只看有货。",
+        enterSku: "请输入 Officeworks 产品链接或 SKU。",
+        checking: "正在查询",
+        checked: "已查询",
+        stores: "家门店",
+        address: "地址",
+        phone: "电话",
+        store: "现货",
+        clickCollect: "C&C 到店自提",
+        delivery: "Delivery 物流",
+        inStock: "有货",
+        noStock: "无货",
+        lookupError: "查询错误",
+        unknown: "未知"
+      }
+    };
+
+    function t(key) {
+      return I18N[currentLang][key] || I18N.en[key] || key;
+    }
+
+    function applyLang() {
+      document.documentElement.lang = currentLang === "zh" ? "zh-Hans" : "en-AU";
+
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const key = el.getAttribute("data-i18n");
+        el.textContent = t(key);
+      });
+
+      $("langBtn").textContent = t("langButton");
+      searchBtn.textContent = t("searchButton");
+      productInput.placeholder = t("inputPlaceholder");
+      filterInput.placeholder = t("filterPlaceholder");
+
+      renderRows();
+    }
+
+    $("langBtn").addEventListener("click", () => {
+      currentLang = currentLang === "en" ? "zh" : "en";
+      localStorage.setItem("owStockLang", currentLang);
+      applyLang();
+    });
 
     function escapeHtml(value) {
       return String(value ?? "")
@@ -738,18 +928,20 @@
     }
 
     function stockText(row) {
-      if (!row) return "Unknown";
-      if (row.status === "error") return "Lookup error";
+      if (!row) return t("unknown");
+      if (row.status === "error") return t("lookupError");
 
       const qty = Number(row.qty || 0);
 
       if (row.status === "in_stock" && qty > 0) {
-        return `${qty} in stock`;
+        return currentLang === "zh"
+          ? `${qty} ${t("inStock")}`
+          : `${qty} ${t("inStock")}`;
       }
 
-      if (row.status === "no_stock") return "No stock";
+      if (row.status === "no_stock") return t("noStock");
 
-      return "Unknown";
+      return t("unknown");
     }
 
     async function runSearch() {
@@ -759,7 +951,7 @@
       const radiusKm = radiusInput.value;
 
       if (!sku) {
-        setStatus("Please enter an Officeworks product URL or SKU.", true, 0);
+        setStatus(t("enterSku"), true, 0);
         return;
       }
 
@@ -790,7 +982,7 @@
           batch += 1;
 
           setStatus(
-            `Checking ${sku} — batch ${batch}…`,
+            `${t("checking")} ${sku} — batch ${batch}…`,
             false,
             totalStores ? Math.round((offset / totalStores) * 100) : 5
           );
@@ -843,7 +1035,7 @@
               : 50;
 
           setStatus(
-            `Checked ${Math.min(offset, totalStores)}/${totalStores} stores.`,
+            `${t("checked")} ${Math.min(offset, totalStores)}/${totalStores} ${t("stores")}.`,
             false,
             progress
           );
@@ -926,10 +1118,10 @@
           <article class="store">
             <div class="store-main">
               <div class="store-title-row">
-                <h3>No matching stores</h3>
+                <h3>${escapeHtml(t("noMatchingStores"))}</h3>
               </div>
               <div class="store-meta">
-                Try increasing radius, changing postcode, clearing the filter, or disabling in-stock only.
+                ${escapeHtml(t("noMatchingHint"))}
               </div>
             </div>
           </article>
@@ -944,7 +1136,7 @@
             .join(", ");
 
           const phoneLine = row.phone
-            ? `<div><strong>Phone</strong> ${escapeHtml(row.phone)}</div>`
+            ? `<div><strong>${escapeHtml(t("phone"))}</strong> ${escapeHtml(row.phone)}</div>`
             : "";
 
           const distance =
@@ -965,7 +1157,7 @@
                 </div>
 
                 <div class="store-meta">
-                  <div><strong>Address</strong> ${escapeHtml(addressLine || "—")}</div>
+                  <div><strong>${escapeHtml(t("address"))}</strong> ${escapeHtml(addressLine || "—")}</div>
                   ${phoneLine}
                 </div>
               </div>
@@ -974,9 +1166,9 @@
                 <div class="stock-badge ${stockClass(row)}">${escapeHtml(stockText(row))}</div>
 
                 <div class="stock-mini">
-                  <span class="mini-pill">Store ${escapeHtml(inStore)}</span>
-                  <span class="mini-pill">C&C ${escapeHtml(clickCollect)}</span>
-                  <span class="mini-pill">Delivery ${escapeHtml(delivery)}</span>
+                  <span class="mini-pill">${escapeHtml(t("store"))} ${escapeHtml(inStore)}</span>
+                  <span class="mini-pill">${escapeHtml(t("clickCollect"))} ${escapeHtml(clickCollect)}</span>
+                  <span class="mini-pill">${escapeHtml(t("delivery"))} ${escapeHtml(delivery)}</span>
                 </div>
               </div>
             </article>
@@ -1100,6 +1292,8 @@
     if (initialState) stateInput.value = initialState.toUpperCase();
     if (initialPostcode) postcodeInput.value = initialPostcode;
     if (initialRadiusKm) radiusInput.value = initialRadiusKm;
+
+    applyLang();
 
     apiGet("/api/health").catch((err) => {
       setStatus(`Worker health check failed: ${err.message}`, true, 0);

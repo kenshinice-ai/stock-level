@@ -1,849 +1,489 @@
-<!doctype html>
-<html lang="zh-Hans">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Officeworks Stock Level Checker</title>
-  <meta name="description" content="Check Officeworks product stock level by store." />
-
-  <style>
-    :root {
-      --bg: #f6f7fb;
-      --card: rgba(255,255,255,0.9);
-      --text: #0f172a;
-      --muted: #6b7280;
-      --border: #e5e7eb;
-      --blue: #2563eb;
-      --blue2: #1d4ed8;
-      --green: #16a34a;
-      --orange: #f97316;
-      --red: #dc2626;
-      --shadow: 0 18px 50px rgba(15,23,42,.09);
-      --radius: 24px;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: var(--text);
-      background:
-        radial-gradient(circle at 12% 8%, rgba(37,99,235,.13), transparent 30%),
-        radial-gradient(circle at 88% 10%, rgba(22,163,74,.12), transparent 28%),
-        linear-gradient(180deg, #f9fafb, var(--bg));
-    }
-
-    .wrap {
-      width: min(1180px, calc(100% - 32px));
-      margin: 0 auto;
-      padding: 42px 0 56px;
-    }
-
-    .hero {
-      display: grid;
-      gap: 16px;
-      margin-bottom: 22px;
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      width: fit-content;
-      padding: 8px 13px;
-      border: 1px solid rgba(37,99,235,.18);
-      border-radius: 999px;
-      background: rgba(255,255,255,.72);
-      color: var(--blue2);
-      font-size: 13px;
-      font-weight: 800;
-      backdrop-filter: blur(10px);
-    }
-
-    h1 {
-      margin: 0;
-      max-width: 860px;
-      font-size: clamp(34px, 5.5vw, 68px);
-      line-height: .98;
-      letter-spacing: -.055em;
-    }
-
-    .sub {
-      max-width: 800px;
-      margin: 0;
-      color: var(--muted);
-      font-size: 17px;
-      line-height: 1.6;
-    }
-
-    .card {
-      background: var(--card);
-      border: 1px solid rgba(229,231,235,.9);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(14px);
-    }
-
-    .panel {
-      padding: 18px;
-      display: grid;
-      gap: 14px;
-    }
-
-    .search-grid {
-      display: grid;
-      grid-template-columns: 1fr 165px 150px;
-      gap: 12px;
-    }
-
-    @media (max-width: 780px) {
-      .search-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    input,
-    select,
-    button {
-      width: 100%;
-      min-height: 52px;
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      padding: 0 14px;
-      font-size: 15px;
-      background: #fff;
-      outline: none;
-    }
-
-    input:focus,
-    select:focus {
-      border-color: rgba(37,99,235,.5);
-      box-shadow: 0 0 0 4px rgba(37,99,235,.12);
-    }
-
-    button {
-      border: 0;
-      cursor: pointer;
-      color: #fff;
-      font-weight: 900;
-      background: linear-gradient(135deg, var(--blue), var(--blue2));
-      transition: transform .12s ease, opacity .12s ease;
-    }
-
-    button:hover {
-      transform: translateY(-1px);
-    }
-
-    button:disabled {
-      opacity: .55;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .secondary {
-      color: var(--text);
-      background: #fff;
-      border: 1px solid var(--border);
-    }
-
-    .hint {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.55;
-    }
-
-    .status {
-      display: none;
-      margin-top: 16px;
-      padding: 16px 18px;
-      gap: 12px;
-      align-items: flex-start;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .status.show {
-      display: flex;
-    }
-
-    .spinner {
-      width: 18px;
-      height: 18px;
-      border: 3px solid rgba(37,99,235,.18);
-      border-top-color: var(--blue);
-      border-radius: 999px;
-      animation: spin .75s linear infinite;
-      flex: 0 0 auto;
-      margin-top: 2px;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    .error {
-      color: var(--red);
-      font-weight: 800;
-    }
-
-    .ok-text {
-      color: var(--green);
-      font-weight: 800;
-    }
-
-    .summary {
-      display: none;
-      grid-template-columns: 1.5fr repeat(3, 1fr);
-      gap: 12px;
-      margin-top: 16px;
-    }
-
-    .summary.show {
-      display: grid;
-    }
-
-    @media (max-width: 900px) {
-      .summary {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-
-    @media (max-width: 560px) {
-      .summary {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .metric {
-      padding: 18px;
-      min-height: 102px;
-    }
-
-    .metric .label {
-      color: var(--muted);
-      font-size: 13px;
-      margin-bottom: 8px;
-    }
-
-    .metric .num {
-      font-size: 32px;
-      font-weight: 950;
-      letter-spacing: -.04em;
-    }
-
-    .product-title {
-      font-size: 17px !important;
-      line-height: 1.32;
-      letter-spacing: -.02em !important;
-    }
-
-    .toolbar {
-      display: none;
-      margin-top: 16px;
-      grid-template-columns: 1fr 180px 160px 160px;
-      gap: 12px;
-    }
-
-    .toolbar.show {
-      display: grid;
-    }
-
-    @media (max-width: 900px) {
-      .toolbar {
-        grid-template-columns: 1fr 1fr;
-      }
-    }
-
-    @media (max-width: 560px) {
-      .toolbar {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .checkbox-line {
-      min-height: 52px;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      background: #fff;
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 0 14px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .checkbox-line input {
-      width: 18px;
-      min-height: 18px;
-      box-shadow: none;
-    }
-
-    .results {
-      margin-top: 16px;
-      display: grid;
-      gap: 12px;
-    }
-
-    .store {
-      padding: 16px 18px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 14px;
-      align-items: center;
-    }
-
-    @media (max-width: 680px) {
-      .store {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .store h3 {
-      margin: 0 0 5px;
-      font-size: 17px;
-      letter-spacing: -.02em;
-    }
-
-    .meta {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 112px;
-      padding: 10px 13px;
-      border-radius: 999px;
-      font-weight: 950;
-      font-size: 14px;
-      white-space: nowrap;
-    }
-
-    .stock-ok {
-      background: rgba(22,163,74,.12);
-      color: var(--green);
-    }
-
-    .stock-low {
-      background: rgba(249,115,22,.14);
-      color: var(--orange);
-    }
-
-    .stock-none {
-      background: rgba(220,38,38,.10);
-      color: var(--red);
-    }
-
-    .stock-error,
-    .stock-unknown {
-      background: rgba(107,114,128,.12);
-      color: #374151;
-    }
-
-    .footer {
-      margin-top: 24px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.6;
-    }
-
-    code {
-      background: rgba(15, 23, 42, .06);
-      border-radius: 7px;
-      padding: 2px 6px;
-    }
-
-    a {
-      color: var(--blue2);
-    }
-  </style>
-</head>
-
-<body>
-  <main class="wrap">
-    <section class="hero">
-      <div class="badge">📦 Officeworks Stock Level Checker</div>
-      <h1>Check Officeworks stock by store.</h1>
-      <p class="sub">
-        输入 Officeworks 产品链接或 SKU，选择州，即可查询各门店库存。适合快速找清仓、缺货、热门产品或附近门店库存。
-      </p>
-    </section>
-
-    <section class="card panel">
-      <div class="search-grid">
-        <input
-          id="productInput"
-          placeholder="Paste Officeworks product URL or SKU, e.g. IP1725MB"
-          autocomplete="off"
-        />
-
-        <select id="stateInput">
-          <option value="all">All States</option>
-          <option value="ACT">ACT</option>
-          <option value="NSW">NSW</option>
-          <option value="NT">NT</option>
-          <option value="QLD">QLD</option>
-          <option value="SA">SA</option>
-          <option value="TAS">TAS</option>
-          <option value="VIC" selected>VIC</option>
-          <option value="WA">WA</option>
-        </select>
-
-        <button id="searchBtn">Check stock</button>
-      </div>
-
-      <div class="hint">
-        数据通过当前 Cloudflare Worker 的 <code>/api/check</code> 实时读取。库存仅供参考，最终以 Officeworks 官网结账、Click & Collect 或门店确认为准。
-      </div>
-    </section>
-
-    <section id="status" class="card status">
-      <div class="spinner"></div>
-      <div id="statusText">Loading…</div>
-    </section>
-
-    <section id="summary" class="summary">
-      <div class="card metric">
-        <div class="label">Product</div>
-        <div id="productName" class="num product-title">—</div>
-      </div>
-
-      <div class="card metric">
-        <div class="label">Stores checked</div>
-        <div id="storesChecked" class="num">0</div>
-      </div>
-
-      <div class="card metric">
-        <div class="label">Stores with stock</div>
-        <div id="storesWithStock" class="num">0</div>
-      </div>
-
-      <div class="card metric">
-        <div class="label">Total visible stock</div>
-        <div id="totalStock" class="num">0</div>
-      </div>
-    </section>
-
-    <section id="toolbar" class="toolbar">
-      <input id="filterInput" placeholder="Filter store, suburb, postcode..." />
-
-      <select id="sortInput">
-        <option value="stock-desc">Stock high to low</option>
-        <option value="stock-asc">Stock low to high</option>
-        <option value="name-asc">Store A to Z</option>
-      </select>
-
-      <label class="checkbox-line">
-        <input id="inStockOnly" type="checkbox" />
-        In-stock only
-      </label>
-
-      <button id="csvBtn" class="secondary">Export CSV</button>
-    </section>
-
-    <section id="results" class="results"></section>
-
-    <section class="footer">
-      This tool is not affiliated with Officeworks. Please use lightly and respectfully.
-      <br />
-      Shareable query format: <code>?sku=IP1725MB&state=VIC</code>
-      <br />
-      API test: <code>/api/health</code>, <code>/api/check?sku=IP1725MB&state=VIC</code>
-    </section>
-  </main>
-
-  <script>
-    const API_BASE = "";
-
-    const $ = (id) => document.getElementById(id);
-
-    const productInput = $("productInput");
-    const stateInput = $("stateInput");
-    const searchBtn = $("searchBtn");
-    const statusBox = $("status");
-    const statusText = $("statusText");
-    const summaryBox = $("summary");
-    const toolbar = $("toolbar");
-    const resultsBox = $("results");
-    const filterInput = $("filterInput");
-    const sortInput = $("sortInput");
-    const inStockOnly = $("inStockOnly");
-    const csvBtn = $("csvBtn");
-
-    let lastData = null;
-    let lastRows = [];
-
-    function escapeHtml(value) {
-      return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
-
-    function setStatus(message, loading = true, isError = false) {
-      statusBox.classList.add("show");
-      statusBox.querySelector(".spinner").style.display = loading ? "block" : "none";
-
-      statusText.innerHTML = isError
-        ? `<span class="error">${escapeHtml(message)}</span>`
-        : escapeHtml(message);
-    }
-
-    function hideStatus() {
-      statusBox.classList.remove("show");
-    }
-
-    function extractSku(input) {
-      const raw = String(input || "").trim();
-      if (!raw) return "";
-
-      try {
-        const url = new URL(raw);
-        const path = decodeURIComponent(url.pathname);
-        const parts = path.split("/").filter(Boolean).reverse();
-
-        for (const part of parts) {
-          const clean = part.toUpperCase().replace(/[^A-Z0-9-]/g, "");
-          const segments = clean.split("-").reverse();
-
-          for (const segment of segments) {
-            if (/^[A-Z0-9]{4,30}$/.test(segment)) {
-              return segment;
-            }
-          }
-        }
-
-        const fromQuery =
-          url.searchParams.get("sku") ||
-          url.searchParams.get("searchTerm") ||
-          url.searchParams.get("partNumber");
-
-        if (fromQuery) {
-          return fromQuery.toUpperCase().replace(/[^A-Z0-9]/g, "");
-        }
-      } catch (_) {}
-
-      return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    }
-
-    async function apiGet(path) {
-      const target = `${API_BASE}${path}`;
-
-      let response;
-
-      try {
-        response = await fetch(target, {
-          method: "GET",
-          headers: {
-            "Accept": "application/json"
-          }
+const OW = {
+  stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
+  productSearch:
+    "https://www.officeworks.com.au/shop/ProductSearchView?pageSize=50&langId=-1&catalogId=-1&storeId=10151&searchTerm=",
+  availabilityBase: "https://api.officeworks.com.au/v2/availability/store"
+};
+
+const ALLOWED_STATES = new Set([
+  "all",
+  "ACT",
+  "NSW",
+  "NT",
+  "QLD",
+  "SA",
+  "TAS",
+  "VIC",
+  "WA"
+]);
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Accept",
+  "Access-Control-Max-Age": "86400"
+};
+
+export default {
+  async fetch(request, env, ctx) {
+    try {
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: CORS
         });
-      } catch (err) {
-        throw new Error(`Network fetch failed. Target: ${target}`);
       }
 
-      const text = await response.text();
-
-      let payload;
-
-      try {
-        payload = JSON.parse(text);
-      } catch (err) {
-        payload = {
-          error: text || `Non-JSON response from ${target}`
-        };
+      if (request.method !== "GET") {
+        return json({ error: "Method not allowed" }, 405);
       }
 
-      if (!response.ok) {
-        throw new Error(payload.error || `HTTP ${response.status} from ${target}`);
+      const url = new URL(request.url);
+      const path = normalisePath(url.pathname);
+
+      if (path === "/api/health") {
+        return json({
+          ok: true,
+          service: "officeworks-stock-worker",
+          worker: "stock-level",
+          time: new Date().toISOString()
+        });
       }
 
-      return payload;
+      if (path === "/api/debug") {
+        return json({
+          ok: true,
+          url: request.url,
+          path,
+          hasAssetsBinding: Boolean(env && env.ASSETS),
+          time: new Date().toISOString()
+        });
+      }
+
+      if (path === "/api/stores") {
+        const state = normaliseState(url.searchParams.get("state") || "all");
+        const stores = await getStores(state);
+
+        return json({
+          ok: true,
+          state,
+          count: stores.length,
+          stores
+        });
+      }
+
+      if (path === "/api/product") {
+        const sku = normaliseSku(url.searchParams.get("sku"));
+
+        if (!sku) {
+          return json({ error: "Missing or invalid sku" }, 400);
+        }
+
+        const product = await getProduct(sku);
+
+        return json({
+          ok: true,
+          product
+        });
+      }
+
+      if (path === "/api/check") {
+        const sku = normaliseSku(url.searchParams.get("sku"));
+        const state = normaliseState(url.searchParams.get("state") || "all");
+
+        if (!sku) {
+          return json({ error: "Missing or invalid sku" }, 400);
+        }
+
+        const startedAt = Date.now();
+
+        const [product, stores] = await Promise.all([
+          getProduct(sku),
+          getStores(state)
+        ]);
+
+        const rows = await mapLimit(stores, 6, async (store) => {
+          let qty = null;
+          let status = "unknown";
+          let error = "";
+
+          try {
+            qty = await getStockQty(store.storeId, sku);
+            status = qty > 0 ? "in_stock" : "no_stock";
+          } catch (err) {
+            qty = null;
+            status = "error";
+            error = err && err.message ? err.message : "Availability lookup failed";
+          }
+
+          return {
+            storeId: store.storeId,
+            storeName: store.storeName,
+            address: store.address,
+            suburb: store.suburb,
+            state: store.state,
+            postcode: store.postcode,
+            phone: store.phone,
+            qty,
+            status,
+            error
+          };
+        });
+
+        rows.sort((a, b) => {
+          const aq = Number(a.qty || 0);
+          const bq = Number(b.qty || 0);
+          return bq - aq || String(a.storeName).localeCompare(String(b.storeName));
+        });
+
+        const storesWithStock = rows.filter((r) => Number(r.qty || 0) > 0).length;
+        const totalVisibleStock = rows.reduce((sum, r) => {
+          const qty = Number(r.qty || 0);
+          return Number.isFinite(qty) ? sum + qty : sum;
+        }, 0);
+
+        return json({
+          ok: true,
+          product,
+          state,
+          summary: {
+            storesChecked: rows.length,
+            storesWithStock,
+            totalVisibleStock,
+            durationMs: Date.now() - startedAt
+          },
+          rows
+        });
+      }
+
+      if (env && env.ASSETS) {
+        return env.ASSETS.fetch(request);
+      }
+
+      return html(fallbackHtml(), 200);
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: err && err.message ? err.message : "Unexpected worker error"
+        },
+        500
+      );
     }
+  }
+};
 
-    function stockClass(row) {
-      if (!row || row.status === "error") return "stock-error";
-      const qty = row.qty;
+function normalisePath(pathname) {
+  const path = String(pathname || "/").replace(/\/+$/, "");
+  return path || "/";
+}
 
-      if (qty === null || qty === undefined) return "stock-unknown";
-      if (qty >= 5) return "stock-ok";
-      if (qty > 0) return "stock-low";
+function normaliseSku(value) {
+  const sku = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 
-      return "stock-none";
+  if (!/^[A-Z0-9]{4,30}$/.test(sku)) return "";
+  return sku;
+}
+
+function normaliseState(value) {
+  const input = String(value || "all").trim().toUpperCase();
+
+  if (input === "ALL") return "all";
+  if (ALLOWED_STATES.has(input)) return input;
+
+  return "all";
+}
+
+async function getStores(state = "all") {
+  const cache = caches.default;
+  const cacheKey = new Request(`https://stock-level-cache.local/stores?state=${state}`);
+
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    return cached.json();
+  }
+
+  const raw = await fetchJson(OW.stores, {
+    cacheTtl: 43200
+  });
+
+  const sourceStores = Array.isArray(raw && raw.stores)
+    ? raw.stores
+    : Array.isArray(raw)
+      ? raw
+      : [];
+
+  const stores = sourceStores
+    .map(normaliseStore)
+    .filter((store) => store.storeId && store.storeName);
+
+  const filtered =
+    state === "all"
+      ? stores
+      : stores.filter((store) => String(store.state || "").toUpperCase() === state);
+
+  const response = new Response(JSON.stringify(filtered), {
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "public, max-age=43200"
     }
+  });
 
-    function stockText(row) {
-      if (!row) return "Unknown";
-      if (row.status === "error") return "Lookup error";
+  await cache.put(cacheKey, response.clone());
+  return filtered;
+}
 
-      const qty = row.qty;
+function normaliseStore(store) {
+  const addressObj = store && store.address ? store.address : {};
+  const contactObj = store && store.contact ? store.contact : {};
 
-      if (qty === null || qty === undefined) return "Unknown";
-      if (qty >= 5) return `${qty} in stock`;
-      if (qty > 0) return `${qty} low stock`;
+  return {
+    storeId: String(
+      store.storeId ||
+        store.id ||
+        store.storeNumber ||
+        store.locationId ||
+        ""
+    ),
+    storeName: String(
+      store.storeName ||
+        store.name ||
+        store.displayName ||
+        ""
+    ),
+    address: String(
+      addressObj.storeAddressLine ||
+        addressObj.addressLine1 ||
+        addressObj.address ||
+        ""
+    ),
+    suburb: String(
+      addressObj.storeCity ||
+        addressObj.suburb ||
+        addressObj.city ||
+        ""
+    ),
+    state: String(
+      addressObj.storeState ||
+        addressObj.state ||
+        ""
+    ).toUpperCase(),
+    postcode: String(
+      addressObj.storePostcode ||
+        addressObj.postcode ||
+        ""
+    ),
+    phone: String(
+      contactObj.storeTelephone ||
+        contactObj.phone ||
+        store.phone ||
+        ""
+    )
+  };
+}
 
-      return "No stock";
+async function getProduct(sku) {
+  const cache = caches.default;
+  const cacheKey = new Request(`https://stock-level-cache.local/product?sku=${sku}`);
+
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    return cached.json();
+  }
+
+  let data = null;
+
+  try {
+    data = await fetchJson(OW.productSearch + encodeURIComponent(sku), {
+      cacheTtl: 3600
+    });
+  } catch (err) {
+    data = null;
+  }
+
+  const products = Array.isArray(data && data.products) ? data.products : [];
+
+  const exact = products.find((product) => {
+    const partNumber = String(
+      (product.identity && product.identity.partNumber) ||
+        product.partNumber ||
+        product.sku ||
+        ""
+    ).toUpperCase();
+
+    return partNumber === sku;
+  });
+
+  const first = exact || products[0] || null;
+
+  const product = {
+    sku,
+    name: String(
+      (first && first.identity && first.identity.name) ||
+        (first && first.name) ||
+        sku
+    ),
+    partNumber: String(
+      (first && first.identity && first.identity.partNumber) ||
+        (first && first.partNumber) ||
+        sku
+    ),
+    rawFound: Boolean(first)
+  };
+
+  const response = new Response(JSON.stringify(product), {
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "public, max-age=3600"
     }
+  });
 
-    async function checkHealth() {
-      try {
-        await apiGet("/api/health");
-      } catch (err) {
-        setStatus(`Worker health check failed: ${err.message}`, false, true);
-      }
-    }
+  await cache.put(cacheKey, response.clone());
+  return product;
+}
 
-    async function runSearch() {
-      const sku = extractSku(productInput.value);
-      const state = stateInput.value;
+async function getStockQty(storeId, sku) {
+  const url = `${OW.availabilityBase}/${encodeURIComponent(
+    storeId
+  )}?partNumber=${encodeURIComponent(sku)}`;
 
-      if (!sku) {
-        setStatus("Please enter an Officeworks product URL or SKU.", false, true);
-        return;
-      }
+  const data = await fetchJson(url, {
+    cacheTtl: 0
+  });
 
-      searchBtn.disabled = true;
-      summaryBox.classList.remove("show");
-      toolbar.classList.remove("show");
-      resultsBox.innerHTML = "";
-      lastRows = [];
-      lastData = null;
+  return extractQty(data);
+}
 
-      const pageUrl = new URL(window.location.href);
-      pageUrl.searchParams.set("sku", sku);
-      pageUrl.searchParams.set("state", state);
-      history.replaceState(null, "", pageUrl.toString());
+function extractQty(data) {
+  const candidates = [];
 
-      try {
-        setStatus(`Checking ${sku} stock in ${state === "all" ? "all states" : state}…`);
+  if (Array.isArray(data)) {
+    candidates.push(...data);
+  } else if (data && typeof data === "object") {
+    candidates.push(data);
+  }
 
-        const data = await apiGet(
-          `/api/check?sku=${encodeURIComponent(sku)}&state=${encodeURIComponent(state)}`
+  for (const item of candidates) {
+    if (typeof item.qty === "number") return item.qty;
+    if (typeof item.quantity === "number") return item.quantity;
+    if (typeof item.stock === "number") return item.stock;
+
+    const options = Array.isArray(item.options) ? item.options : [];
+
+    for (const option of options) {
+      const type = String(option.type || "").toLowerCase();
+
+      if (
+        type === "instore" ||
+        type === "in_store" ||
+        type === "in-store" ||
+        type.includes("store")
+      ) {
+        const qty = Number(
+          option.qty ??
+            option.quantity ??
+            option.stock ??
+            0
         );
 
-        lastData = data;
-        lastRows = Array.isArray(data.rows) ? data.rows : [];
-
-        $("productName").textContent = data.product && data.product.name
-          ? data.product.name
-          : sku;
-
-        $("storesChecked").textContent =
-          data.summary && typeof data.summary.storesChecked !== "undefined"
-            ? data.summary.storesChecked
-            : lastRows.length;
-
-        $("storesWithStock").textContent =
-          data.summary && typeof data.summary.storesWithStock !== "undefined"
-            ? data.summary.storesWithStock
-            : 0;
-
-        $("totalStock").textContent =
-          data.summary && typeof data.summary.totalVisibleStock !== "undefined"
-            ? data.summary.totalVisibleStock
-            : 0;
-
-        summaryBox.classList.add("show");
-        toolbar.classList.add("show");
-
-        hideStatus();
-        renderRows();
-      } catch (err) {
-        setStatus(err.message || "Something went wrong.", false, true);
-      } finally {
-        searchBtn.disabled = false;
+        return Number.isFinite(qty) ? qty : 0;
       }
     }
+  }
 
-    function renderRows() {
-      const query = filterInput.value.trim().toLowerCase();
-      const sort = sortInput.value;
-      const onlyStock = inStockOnly.checked;
+  return 0;
+}
 
-      let rows = [...lastRows];
+async function fetchJson(url, options = {}) {
+  const cacheTtl = Number(options.cacheTtl || 0);
 
-      if (onlyStock) {
-        rows = rows.filter((row) => Number(row.qty || 0) > 0);
-      }
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "application/json,text/plain,*/*",
+      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/3.0"
+    },
+    cf:
+      cacheTtl > 0
+        ? {
+            cacheTtl,
+            cacheEverything: true
+          }
+        : {
+            cacheTtl: 0
+          }
+  });
 
-      if (query) {
-        rows = rows.filter((row) => {
-          const haystack = [
-            row.storeName,
-            row.state,
-            row.suburb,
-            row.postcode,
-            row.address,
-            row.phone,
-            row.storeId
-          ]
-            .join(" ")
-            .toLowerCase();
+  const text = await response.text();
 
-          return haystack.includes(query);
-        });
-      }
+  if (!response.ok) {
+    throw new Error(`Upstream HTTP ${response.status}: ${text.slice(0, 240)}`);
+  }
 
-      rows.sort((a, b) => {
-        const aq = Number(a.qty || 0);
-        const bq = Number(b.qty || 0);
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(`Upstream returned non-JSON response: ${text.slice(0, 240)}`);
+  }
+}
 
-        if (sort === "stock-desc") {
-          return bq - aq || String(a.storeName).localeCompare(String(b.storeName));
-        }
+async function mapLimit(items, limit, mapper) {
+  const results = new Array(items.length);
+  let index = 0;
 
-        if (sort === "stock-asc") {
-          return aq - bq || String(a.storeName).localeCompare(String(b.storeName));
-        }
-
-        return String(a.storeName).localeCompare(String(b.storeName));
-      });
-
-      if (!rows.length) {
-        resultsBox.innerHTML = `
-          <article class="card store">
-            <div>
-              <h3>No matching stores</h3>
-              <div class="meta">Try another state, clear the filter, or disable in-stock only.</div>
-            </div>
-          </article>
-        `;
-        return;
-      }
-
-      resultsBox.innerHTML = rows
-        .map((row) => {
-          const detailLine = row.error
-            ? `<br />Error: ${escapeHtml(row.error)}`
-            : "";
-
-          return `
-            <article class="card store">
-              <div>
-                <h3>${escapeHtml(row.storeName || "Unknown store")}</h3>
-                <div class="meta">
-                  ${escapeHtml(row.address || "")}
-                  ${row.address ? "<br />" : ""}
-                  ${escapeHtml([row.suburb, row.state, row.postcode].filter(Boolean).join(" "))}
-                  ${row.phone ? `<br />Phone: ${escapeHtml(row.phone)}` : ""}
-                  ${row.storeId ? `<br />Store ID: ${escapeHtml(row.storeId)}` : ""}
-                  ${detailLine}
-                </div>
-              </div>
-
-              <div class="pill ${stockClass(row)}">${escapeHtml(stockText(row))}</div>
-            </article>
-          `;
-        })
-        .join("");
+  async function runWorker() {
+    while (index < items.length) {
+      const currentIndex = index++;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
     }
+  }
 
-    function exportCsv() {
-      if (!lastRows.length) return;
+  const workers = Array.from(
+    {
+      length: Math.min(limit, items.length)
+    },
+    () => runWorker()
+  );
 
-      const headers = [
-        "SKU",
-        "Product",
-        "Store ID",
-        "Store Name",
-        "Address",
-        "Suburb",
-        "State",
-        "Postcode",
-        "Phone",
-        "Qty",
-        "Status",
-        "Error"
-      ];
+  await Promise.all(workers);
+  return results;
+}
 
-      const sku = lastData && lastData.product ? lastData.product.sku : extractSku(productInput.value);
-      const productName = lastData && lastData.product ? lastData.product.name : "";
-
-      const lines = [
-        headers.join(","),
-        ...lastRows.map((row) =>
-          [
-            sku,
-            productName,
-            row.storeId,
-            row.storeName,
-            row.address,
-            row.suburb,
-            row.state,
-            row.postcode,
-            row.phone,
-            row.qty,
-            row.status,
-            row.error
-          ]
-            .map(csvCell)
-            .join(",")
-        )
-      ];
-
-      const blob = new Blob([lines.join("\n")], {
-        type: "text/csv;charset=utf-8"
-      });
-
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `officeworks-stock-${sku}-${stateInput.value}.csv`;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      URL.revokeObjectURL(link.href);
+function json(payload, status = 200) {
+  return new Response(JSON.stringify(payload, null, 2), {
+    status,
+    headers: {
+      ...CORS,
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store"
     }
+  });
+}
 
-    function csvCell(value) {
-      const text = String(value ?? "");
-      return `"${text.replaceAll('"', '""')}"`;
+function html(markup, status = 200) {
+  return new Response(markup, {
+    status,
+    headers: {
+      ...CORS,
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store"
     }
+  });
+}
 
-    searchBtn.addEventListener("click", runSearch);
-
-    productInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        runSearch();
-      }
-    });
-
-    filterInput.addEventListener("input", renderRows);
-    sortInput.addEventListener("change", renderRows);
-    inStockOnly.addEventListener("change", renderRows);
-    csvBtn.addEventListener("click", exportCsv);
-
-    const params = new URLSearchParams(window.location.search);
-    const initialSku = params.get("sku");
-    const initialState = params.get("state");
-
-    if (initialSku) {
-      productInput.value = initialSku;
-    }
-
-    if (initialState) {
-      stateInput.value = initialState;
-    }
-
-    checkHealth();
-
-    if (initialSku) {
-      runSearch();
-    }
-  </script>
+function fallbackHtml() {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Stock Level Worker</title>
+</head>
+<body>
+  <h1>Stock Level Worker is running.</h1>
+  <p>Try <code>/api/health</code> or <code>/api/check?sku=IP1725MB&state=VIC</code>.</p>
 </body>
-</html>
+</html>`;
+}

@@ -1,11 +1,20 @@
 const OW = {
   stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
-  productSearch: "https://www.officeworks.com.au/shop/ProductSearchView?pageSize=50&langId=-1&catalogId=-1&storeId=10151&searchTerm=",
+  productSearch:
+    "https://www.officeworks.com.au/shop/ProductSearchView?pageSize=50&langId=-1&catalogId=-1&storeId=10151&searchTerm=",
   availabilityBase: "https://api.officeworks.com.au/v2/availability/store"
 };
 
 const ALLOWED_STATES = new Set([
-  "all", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"
+  "all",
+  "ACT",
+  "NSW",
+  "NT",
+  "QLD",
+  "SA",
+  "TAS",
+  "VIC",
+  "WA"
 ]);
 
 const CORS = {
@@ -19,7 +28,10 @@ export default {
   async fetch(request, env, ctx) {
     try {
       if (request.method === "OPTIONS") {
-        return new Response(null, { status: 204, headers: CORS });
+        return new Response(null, {
+          status: 204,
+          headers: CORS
+        });
       }
 
       if (request.method !== "GET") {
@@ -27,33 +39,23 @@ export default {
       }
 
       const url = new URL(request.url);
-      const path = url.pathname.replace(/\/+$/, "") || "/";
-
-      if (path === "/") {
-        return html(`
-          <!doctype html>
-          <html>
-            <head>
-              <meta charset="utf-8" />
-              <meta name="viewport" content="width=device-width,initial-scale=1" />
-              <title>Officeworks Stock Worker</title>
-              <style>
-                body { font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; padding: 40px; line-height: 1.5; }
-                code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
-              </style>
-            </head>
-            <body>
-              <h1>Officeworks Stock Worker is running.</h1>
-              <p>Try <code>/api/health</code> or <code>/api/check?sku=APMJQJ3ZA&state=VIC</code>.</p>
-            </body>
-          </html>
-        `);
-      }
+      const path = normalisePath(url.pathname);
 
       if (path === "/api/health") {
         return json({
           ok: true,
           service: "officeworks-stock-worker",
+          worker: "stock-level",
+          time: new Date().toISOString()
+        });
+      }
+
+      if (path === "/api/debug") {
+        return json({
+          ok: true,
+          url: request.url,
+          path,
+          hasAssetsBinding: Boolean(env && env.ASSETS),
           time: new Date().toISOString()
         });
       }
@@ -61,6 +63,7 @@ export default {
       if (path === "/api/stores") {
         const state = normaliseState(url.searchParams.get("state") || "all");
         const stores = await getStores(state);
+
         return json({
           ok: true,
           state,
@@ -71,9 +74,13 @@ export default {
 
       if (path === "/api/product") {
         const sku = normaliseSku(url.searchParams.get("sku"));
-        if (!sku) return json({ error: "Missing or invalid sku" }, 400);
+
+        if (!sku) {
+          return json({ error: "Missing or invalid sku" }, 400);
+        }
 
         const product = await getProduct(sku);
+
         return json({
           ok: true,
           product
@@ -84,7 +91,9 @@ export default {
         const sku = normaliseSku(url.searchParams.get("sku"));
         const state = normaliseState(url.searchParams.get("state") || "all");
 
-        if (!sku) return json({ error: "Missing or invalid sku" }, 400);
+        if (!sku) {
+          return json({ error: "Missing or invalid sku" }, 400);
+        }
 
         const startedAt = Date.now();
 
@@ -93,23 +102,19 @@ export default {
           getStores(state)
         ]);
 
-        if (!stores.length) {
-          return json({
-            ok: true,
-            product,
-            state,
-            summary: {
-              storesChecked: 0,
-              storesWithStock: 0,
-              totalVisibleStock: 0,
-              durationMs: Date.now() - startedAt
-            },
-            rows: []
-          });
-        }
+        const rows = await mapLimit(stores, 6, async (store) => {
+          let qty = null;
+          let status = "unknown";
+          let error = "";
 
-        const rows = await mapLimit(stores, 8, async (store) => {
-          const qty = await getStockQty(store.storeId, sku).catch(() => null);
+          try {
+            qty = await getStockQty(store.storeId, sku);
+            status = qty > 0 ? "in_stock" : "no_stock";
+          } catch (err) {
+            qty = null;
+            status = "error";
+            error = err && err.message ? err.message : "Availability lookup failed";
+          }
 
           return {
             storeId: store.storeId,
@@ -119,16 +124,22 @@ export default {
             state: store.state,
             postcode: store.postcode,
             phone: store.phone,
-            qty
+            qty,
+            status,
+            error
           };
         });
 
-        rows.sort((a, b) => Number(b.qty || 0) - Number(a.qty || 0));
+        rows.sort((a, b) => {
+          const aq = Number(a.qty || 0);
+          const bq = Number(b.qty || 0);
+          return bq - aq || String(a.storeName).localeCompare(String(b.storeName));
+        });
 
-        const storesWithStock = rows.filter(r => Number(r.qty || 0) > 0).length;
+        const storesWithStock = rows.filter((r) => Number(r.qty || 0) > 0).length;
         const totalVisibleStock = rows.reduce((sum, r) => {
           const qty = Number(r.qty || 0);
-          return sum + (Number.isFinite(qty) ? qty : 0);
+          return Number.isFinite(qty) ? sum + qty : sum;
         }, 0);
 
         return json({
@@ -145,15 +156,27 @@ export default {
         });
       }
 
-      return json({ error: "Not found" }, 404);
+      if (env && env.ASSETS) {
+        return env.ASSETS.fetch(request);
+      }
 
+      return html(fallbackHtml(), 200);
     } catch (err) {
-      return json({
-        error: err?.message || "Unexpected worker error"
-      }, 500);
+      return json(
+        {
+          ok: false,
+          error: err && err.message ? err.message : "Unexpected worker error"
+        },
+        500
+      );
     }
   }
 };
+
+function normalisePath(pathname) {
+  const path = String(pathname || "/").replace(/\/+$/, "");
+  return path || "/";
+}
 
 function normaliseSku(value) {
   const sku = String(value || "")
@@ -166,24 +189,28 @@ function normaliseSku(value) {
 }
 
 function normaliseState(value) {
-  const state = String(value || "all").trim().toUpperCase();
-  if (state === "ALL") return "all";
-  if (!ALLOWED_STATES.has(state)) return "all";
-  return state;
+  const input = String(value || "all").trim().toUpperCase();
+
+  if (input === "ALL") return "all";
+  if (ALLOWED_STATES.has(input)) return input;
+
+  return "all";
 }
 
 async function getStores(state = "all") {
   const cache = caches.default;
-  const cacheKey = new Request(`https://worker-cache.local/stores?state=${state}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/stores?state=${state}`);
 
   const cached = await cache.match(cacheKey);
-  if (cached) return cached.json();
+  if (cached) {
+    return cached.json();
+  }
 
   const raw = await fetchJson(OW.stores, {
     cacheTtl: 43200
   });
 
-  const sourceStores = Array.isArray(raw?.stores)
+  const sourceStores = Array.isArray(raw && raw.stores)
     ? raw.stores
     : Array.isArray(raw)
       ? raw
@@ -191,15 +218,16 @@ async function getStores(state = "all") {
 
   const stores = sourceStores
     .map(normaliseStore)
-    .filter(s => s.storeId && s.storeName);
+    .filter((store) => store.storeId && store.storeName);
 
-  const filtered = state === "all"
-    ? stores
-    : stores.filter(s => String(s.state || "").toUpperCase() === state);
+  const filtered =
+    state === "all"
+      ? stores
+      : stores.filter((store) => String(store.state || "").toUpperCase() === state);
 
   const response = new Response(JSON.stringify(filtered), {
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "public, max-age=43200"
     }
   });
@@ -209,75 +237,84 @@ async function getStores(state = "all") {
 }
 
 function normaliseStore(store) {
-  const addressObj = store?.address || {};
-  const contactObj = store?.contact || {};
+  const addressObj = store && store.address ? store.address : {};
+  const contactObj = store && store.contact ? store.contact : {};
 
   return {
     storeId: String(
-      store?.storeId ||
-      store?.id ||
-      store?.storeNumber ||
-      ""
+      store.storeId ||
+        store.id ||
+        store.storeNumber ||
+        store.locationId ||
+        ""
     ),
     storeName: String(
-      store?.storeName ||
-      store?.name ||
-      ""
+      store.storeName ||
+        store.name ||
+        store.displayName ||
+        ""
     ),
     address: String(
-      addressObj?.storeAddressLine ||
-      addressObj?.addressLine1 ||
-      addressObj?.address ||
-      ""
+      addressObj.storeAddressLine ||
+        addressObj.addressLine1 ||
+        addressObj.address ||
+        ""
     ),
     suburb: String(
-      addressObj?.storeCity ||
-      addressObj?.suburb ||
-      addressObj?.city ||
-      ""
+      addressObj.storeCity ||
+        addressObj.suburb ||
+        addressObj.city ||
+        ""
     ),
     state: String(
-      addressObj?.storeState ||
-      addressObj?.state ||
-      ""
+      addressObj.storeState ||
+        addressObj.state ||
+        ""
     ).toUpperCase(),
     postcode: String(
-      addressObj?.storePostcode ||
-      addressObj?.postcode ||
-      ""
+      addressObj.storePostcode ||
+        addressObj.postcode ||
+        ""
     ),
     phone: String(
-      contactObj?.storeTelephone ||
-      contactObj?.phone ||
-      store?.phone ||
-      ""
+      contactObj.storeTelephone ||
+        contactObj.phone ||
+        store.phone ||
+        ""
     )
   };
 }
 
 async function getProduct(sku) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://worker-cache.local/product?sku=${sku}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/product?sku=${sku}`);
 
   const cached = await cache.match(cacheKey);
-  if (cached) return cached.json();
+  if (cached) {
+    return cached.json();
+  }
 
-  const url = OW.productSearch + encodeURIComponent(sku);
-  const data = await fetchJson(url, {
-    cacheTtl: 3600
-  }).catch(() => null);
+  let data = null;
 
-  const products = Array.isArray(data?.products) ? data.products : [];
+  try {
+    data = await fetchJson(OW.productSearch + encodeURIComponent(sku), {
+      cacheTtl: 3600
+    });
+  } catch (err) {
+    data = null;
+  }
 
-  const exact = products.find(p => {
-    const part = String(
-      p?.identity?.partNumber ||
-      p?.partNumber ||
-      p?.sku ||
-      ""
+  const products = Array.isArray(data && data.products) ? data.products : [];
+
+  const exact = products.find((product) => {
+    const partNumber = String(
+      (product.identity && product.identity.partNumber) ||
+        product.partNumber ||
+        product.sku ||
+        ""
     ).toUpperCase();
 
-    return part === sku;
+    return partNumber === sku;
   });
 
   const first = exact || products[0] || null;
@@ -285,21 +322,21 @@ async function getProduct(sku) {
   const product = {
     sku,
     name: String(
-      first?.identity?.name ||
-      first?.name ||
-      sku
+      (first && first.identity && first.identity.name) ||
+        (first && first.name) ||
+        sku
     ),
     partNumber: String(
-      first?.identity?.partNumber ||
-      first?.partNumber ||
-      sku
+      (first && first.identity && first.identity.partNumber) ||
+        (first && first.partNumber) ||
+        sku
     ),
     rawFound: Boolean(first)
   };
 
   const response = new Response(JSON.stringify(product), {
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "public, max-age=3600"
     }
   });
@@ -309,7 +346,9 @@ async function getProduct(sku) {
 }
 
 async function getStockQty(storeId, sku) {
-  const url = `${OW.availabilityBase}/${encodeURIComponent(storeId)}?partNumber=${encodeURIComponent(sku)}`;
+  const url = `${OW.availabilityBase}/${encodeURIComponent(
+    storeId
+  )}?partNumber=${encodeURIComponent(sku)}`;
 
   const data = await fetchJson(url, {
     cacheTtl: 0
@@ -321,18 +360,21 @@ async function getStockQty(storeId, sku) {
 function extractQty(data) {
   const candidates = [];
 
-  if (Array.isArray(data)) candidates.push(...data);
-  else if (data && typeof data === "object") candidates.push(data);
+  if (Array.isArray(data)) {
+    candidates.push(...data);
+  } else if (data && typeof data === "object") {
+    candidates.push(data);
+  }
 
   for (const item of candidates) {
-    if (typeof item?.qty === "number") return item.qty;
-    if (typeof item?.quantity === "number") return item.quantity;
-    if (typeof item?.stock === "number") return item.stock;
+    if (typeof item.qty === "number") return item.qty;
+    if (typeof item.quantity === "number") return item.quantity;
+    if (typeof item.stock === "number") return item.stock;
 
-    const options = Array.isArray(item?.options) ? item.options : [];
+    const options = Array.isArray(item.options) ? item.options : [];
 
-    for (const opt of options) {
-      const type = String(opt?.type || "").toLowerCase();
+    for (const option of options) {
+      const type = String(option.type || "").toLowerCase();
 
       if (
         type === "instore" ||
@@ -341,10 +383,10 @@ function extractQty(data) {
         type.includes("store")
       ) {
         const qty = Number(
-          opt?.qty ??
-          opt?.quantity ??
-          opt?.stock ??
-          0
+          option.qty ??
+            option.quantity ??
+            option.stock ??
+            0
         );
 
         return Number.isFinite(qty) ? qty : 0;
@@ -358,30 +400,41 @@ function extractQty(data) {
 async function fetchJson(url, options = {}) {
   const cacheTtl = Number(options.cacheTtl || 0);
 
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     method: "GET",
     headers: {
       "Accept": "application/json,text/plain,*/*",
-      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/2.0"
+      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/3.0"
     },
-    cf: cacheTtl > 0
-      ? { cacheTtl, cacheEverything: true }
-      : { cacheTtl: 0 }
+    cf:
+      cacheTtl > 0
+        ? {
+            cacheTtl,
+            cacheEverything: true
+          }
+        : {
+            cacheTtl: 0
+          }
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Upstream HTTP ${res.status}: ${text.slice(0, 180)}`);
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Upstream HTTP ${response.status}: ${text.slice(0, 240)}`);
   }
 
-  return res.json();
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(`Upstream returned non-JSON response: ${text.slice(0, 240)}`);
+  }
 }
 
 async function mapLimit(items, limit, mapper) {
   const results = new Array(items.length);
   let index = 0;
 
-  async function worker() {
+  async function runWorker() {
     while (index < items.length) {
       const currentIndex = index++;
       results[currentIndex] = await mapper(items[currentIndex], currentIndex);
@@ -389,8 +442,10 @@ async function mapLimit(items, limit, mapper) {
   }
 
   const workers = Array.from(
-    { length: Math.min(limit, items.length) },
-    () => worker()
+    {
+      length: Math.min(limit, items.length)
+    },
+    () => runWorker()
   );
 
   await Promise.all(workers);
@@ -417,4 +472,18 @@ function html(markup, status = 200) {
       "Cache-Control": "no-store"
     }
   });
+}
+
+function fallbackHtml() {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Stock Level Worker</title>
+</head>
+<body>
+  <h1>Stock Level Worker is running.</h1>
+  <p>Try <code>/api/health</code> or <code>/api/check?sku=IP1725MB&state=VIC</code>.</p>
+</body>
+</html>`;
 }

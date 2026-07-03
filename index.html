@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Officeworks Stock Level Checker</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --blue: #2563eb;
+      --blue2: #1d4ed8;
+      --green: #16a34a;
+      --orange: #f97316;
+      --red: #dc2626;
+      --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 10%, rgba(37, 99, 235, 0.12), transparent 32%),
+        radial-gradient(circle at 85% 5%, rgba(22, 163, 74, 0.10), transparent 28%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 40px 0 56px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 8px 12px;
+      border: 1px solid rgba(37, 99, 235, 0.18);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.72);
+      color: var(--blue2);
+      font-size: 13px;
+      font-weight: 700;
+      backdrop-filter: blur(8px);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 62px);
+      line-height: 0.98;
+      letter-spacing: -0.05em;
+    }
+
+    .sub {
+      max-width: 760px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.6;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.88);
+      border: 1px solid rgba(229, 231, 235, 0.85);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .search-card {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 180px 150px;
+      gap: 12px;
+    }
+
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    input, select, button {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      min-height: 52px;
+      padding: 0 14px;
+      font-size: 15px;
+      outline: none;
+      background: white;
+    }
+
+    input:focus, select:focus {
+      border-color: rgba(37, 99, 235, 0.5);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+      color: white;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--blue), var(--blue2));
+      transition: transform .12s ease, opacity .12s ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .status {
+      margin-top: 18px;
+      padding: 16px 18px;
+      display: none;
+      align-items: flex-start;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status.show { display: flex; }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 3px solid rgba(37, 99, 235, .18);
+      border-top-color: var(--blue);
+      border-radius: 999px;
+      animation: spin .7s linear infinite;
+      flex: 0 0 auto;
+      margin-top: 1px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .summary {
+      display: none;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .summary.show { display: grid; }
+
+    @media (max-width: 860px) {
+      .summary { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .metric {
+      padding: 18px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .metric .num {
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+    }
+
+    .results {
+      margin-top: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .toolbar {
+      display: none;
+      margin-top: 18px;
+      gap: 12px;
+      grid-template-columns: 1fr 180px;
+    }
+
+    .toolbar.show { display: grid; }
+
+    @media (max-width: 760px) {
+      .toolbar { grid-template-columns: 1fr; }
+    }
+
+    .store {
+      padding: 16px 18px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: center;
+    }
+
+    @media (max-width: 660px) {
+      .store { grid-template-columns: 1fr; }
+    }
+
+    .store h3 {
+      margin: 0 0 5px;
+      font-size: 17px;
+      letter-spacing: -0.02em;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 104px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      font-weight: 900;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .ok { background: rgba(22,163,74,.12); color: var(--green); }
+    .low { background: rgba(249,115,22,.13); color: var(--orange); }
+    .none { background: rgba(220,38,38,.10); color: var(--red); }
+    .unknown { background: rgba(107,114,128,.12); color: #374151; }
+
+    .footer {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .error {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    code {
+      background: rgba(17, 24, 39, .06);
+      padding: 2px 6px;
+      border-radius: 7px;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="badge">📦 Officeworks Stock Level Checker</div>
+      <h1>Check product stock by store.</h1>
+      <p class="sub">
+        输入 Officeworks 产品链接或 SKU，选择州，即可查询各门店库存。适合找清仓、缺货、热门小件或附近门店库存。
+      </p>
+    </section>
+
+    <section class="card search-card">
+      <div class="grid">
+        <input id="productInput" placeholder="Paste Officeworks product URL or SKU, e.g. APMJQJ3ZA" autocomplete="off" />
+        <select id="stateInput">
+          <option value="all">All States</option>
+          <option value="ACT">ACT</option>
+          <option value="NSW">NSW</option>
+          <option value="NT">NT</option>
+          <option value="QLD">QLD</option>
+          <option value="SA">SA</option>
+          <option value="TAS">TAS</option>
+          <option value="VIC" selected>VIC</option>
+          <option value="WA">WA</option>
+        </select>
+        <button id="searchBtn">Check stock</button>
+      </div>
+      <div class="hint">
+        支持完整产品链接或 SKU。建议不要高频刷新；库存仅供参考，最终以 Officeworks 店内或官网结账为准。
+      </div>
+    </section>
+
+    <section id="status" class="card status">
+      <div class="spinner"></div>
+      <div id="statusText">Loading…</div>
+    </section>
+
+    <section id="summary" class="summary">
+      <div class="card metric">
+        <div class="label">Product</div>
+        <div id="productName" class="num" style="font-size:18px;line-height:1.25;">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Stores checked</div>
+        <div id="storesChecked" class="num">0</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Stores with stock</div>
+        <div id="storesWithStock" class="num">0</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Total visible stock</div>
+        <div id="totalStock" class="num">0</div>
+      </div>
+    </section>
+
+    <section id="toolbar" class="toolbar">
+      <input id="filterInput" placeholder="Filter by suburb, store name, postcode..." />
+      <select id="sortInput">
+        <option value="stock-desc">Stock high to low</option>
+        <option value="stock-asc">Stock low to high</option>
+        <option value="name-asc">Store A to Z</option>
+      </select>
+    </section>
+
+    <section id="results" class="results"></section>
+
+    <section class="footer">
+      Built for GitHub Pages. Data is requested live through your configured proxy.
+      This tool should be used respectfully and lightly. It is not affiliated with Officeworks.
+    </section>
+  </main>
+
+  <script>
+    // 1) Replace this with your Cloudflare Worker URL.
+    // Example: https://ow-stock-proxy.yourname.workers.dev
+    const PROXY_BASE = "https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev";
+
+    // 2) If you want to try direct browser calls first, set this to true.
+    // In many cases it will fail due to CORS.
+    const TRY_DIRECT_FIRST = false;
+
+    const ENDPOINTS = {
+      stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
+      productSearch: "https://www.officeworks.com.au/shop/ProductSearchView?pageSize=50&langId=-1&catalogId=-1&storeId=10151&searchTerm=",
+      availability: "https://api.officeworks.com.au/v2/availability/store"
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    const productInput = $("productInput");
+    const stateInput = $("stateInput");
+    const searchBtn = $("searchBtn");
+    const statusBox = $("status");
+    const statusText = $("statusText");
+    const summaryBox = $("summary");
+    const toolbar = $("toolbar");
+    const resultsBox = $("results");
+    const filterInput = $("filterInput");
+    const sortInput = $("sortInput");
+
+    let lastRows = [];
+
+    function setStatus(message, loading = true, isError = false) {
+      statusBox.classList.add("show");
+      statusBox.querySelector(".spinner").style.display = loading ? "block" : "none";
+      statusText.innerHTML = isError ? `<span class="error">${escapeHtml(message)}</span>` : escapeHtml(message);
+    }
+
+    function hideStatus() {
+      statusBox.classList.remove("show");
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function extractSku(input) {
+      const raw = String(input || "").trim();
+
+      if (!raw) return "";
+
+      // If user pasted full Officeworks URL, try to extract the last clean product code.
+      // Common pattern often includes /p/...-SKU or ends with SKU.
+      try {
+        const url = new URL(raw);
+        const parts = url.pathname.split("/").filter(Boolean);
+        const last = parts[parts.length - 1] || "";
+        const candidates = [
+          last,
+          ...parts.reverse()
+        ];
+
+        for (const c of candidates) {
+          const m = c.toUpperCase().match(/[A-Z0-9]{5,20}$/);
+          if (m) return m[0];
+        }
+      } catch (_) {
+        // Not a URL; continue as SKU.
+      }
+
+      return raw
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .trim();
+    }
+
+    async function requestJson(url) {
+      const direct = async () => {
+        const res = await fetch(url, { method: "GET" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      };
+
+      const viaProxy = async () => {
+        if (!PROXY_BASE || PROXY_BASE.includes("YOUR-WORKER-NAME")) {
+          throw new Error("Please configure PROXY_BASE with your Cloudflare Worker URL.");
+        }
+
+        const res = await fetch(`${PROXY_BASE}/?url=${encodeURIComponent(url)}`, {
+          method: "GET"
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`Proxy HTTP ${res.status}: ${text.slice(0, 160)}`);
+        }
+
+        return res.json();
+      };
+
+      if (TRY_DIRECT_FIRST) {
+        try {
+          return await direct();
+        } catch (e) {
+          return viaProxy();
+        }
+      }
+
+      return viaProxy();
+    }
+
+    async function getStores(state) {
+      const data = await requestJson(ENDPOINTS.stores);
+      const stores = Array.isArray(data?.stores) ? data.stores : [];
+
+      if (state === "all") return stores;
+
+      return stores.filter(s =>
+        String(s?.address?.storeState || "").toUpperCase() === state.toUpperCase()
+      );
+    }
+
+    async function getProductName(sku) {
+      try {
+        const data = await requestJson(ENDPOINTS.productSearch + encodeURIComponent(sku));
+        const products = Array.isArray(data?.products) ? data.products : [];
+        const exact = products.find(p =>
+          String(p?.identity?.partNumber || "").toUpperCase() === sku.toUpperCase()
+        );
+        return exact?.identity?.name || products?.[0]?.identity?.name || sku;
+      } catch (e) {
+        return sku;
+      }
+    }
+
+    async function getAvailability(storeId, sku) {
+      const url = `${ENDPOINTS.availability}/${encodeURIComponent(storeId)}?partNumber=${encodeURIComponent(sku)}`;
+      const data = await requestJson(url);
+
+      // Known shape from public examples:
+      // availability[0].options[] where type === "inStore" and qty exists.
+      const options = Array.isArray(data?.[0]?.options) ? data[0].options : [];
+
+      const inStore = options.find(o => String(o?.type || "").toLowerCase() === "instore");
+      const qty = Number(inStore?.qty ?? 0);
+
+      return {
+        qty: Number.isFinite(qty) ? qty : 0,
+        raw: data
+      };
+    }
+
+    function stockClass(qty) {
+      if (qty >= 5) return "ok";
+      if (qty > 0) return "low";
+      if (qty === 0) return "none";
+      return "unknown";
+    }
+
+    function stockText(qty) {
+      if (qty >= 5) return `${qty} in stock`;
+      if (qty > 0) return `${qty} low stock`;
+      if (qty === 0) return "No stock";
+      return "Unknown";
+    }
+
+    function renderRows() {
+      const q = filterInput.value.trim().toLowerCase();
+      const sort = sortInput.value;
+
+      let rows = [...lastRows];
+
+      if (q) {
+        rows = rows.filter(r => {
+          const haystack = [
+            r.storeName,
+            r.state,
+            r.city,
+            r.postcode,
+            r.address
+          ].join(" ").toLowerCase();
+
+          return haystack.includes(q);
+        });
+      }
+
+      rows.sort((a, b) => {
+        if (sort === "stock-desc") return b.qty - a.qty || a.storeName.localeCompare(b.storeName);
+        if (sort === "stock-asc") return a.qty - b.qty || a.storeName.localeCompare(b.storeName);
+        return a.storeName.localeCompare(b.storeName);
+      });
+
+      resultsBox.innerHTML = rows.map(r => `
+        <article class="card store">
+          <div>
+            <h3>${escapeHtml(r.storeName)}</h3>
+            <div class="meta">
+              ${escapeHtml(r.address)}<br />
+              ${escapeHtml(r.city)} ${escapeHtml(r.state)} ${escapeHtml(r.postcode)}
+              ${r.phone ? `<br />${escapeHtml(r.phone)}` : ""}
+            </div>
+          </div>
+          <div class="pill ${stockClass(r.qty)}">${escapeHtml(stockText(r.qty))}</div>
+        </article>
+      `).join("");
+
+      if (!rows.length) {
+        resultsBox.innerHTML = `
+          <article class="card store">
+            <div>
+              <h3>No matching stores</h3>
+              <div class="meta">Try clearing the filter or checking another state.</div>
+            </div>
+          </article>
+        `;
+      }
+    }
+
+    async function runSearch() {
+      const sku = extractSku(productInput.value);
+      const state = stateInput.value;
+
+      if (!sku) {
+        setStatus("Please enter an Officeworks product URL or SKU.", false, true);
+        return;
+      }
+
+      searchBtn.disabled = true;
+      summaryBox.classList.remove("show");
+      toolbar.classList.remove("show");
+      resultsBox.innerHTML = "";
+      lastRows = [];
+
+      try {
+        setStatus(`Looking up product ${sku}…`);
+        const [productName, stores] = await Promise.all([
+          getProductName(sku),
+          getStores(state)
+        ]);
+
+        if (!stores.length) {
+          throw new Error("No stores returned. The store API may have changed.");
+        }
+
+        $("productName").textContent = productName;
+        $("storesChecked").textContent = stores.length;
+        $("storesWithStock").textContent = "0";
+        $("totalStock").textContent = "0";
+        summaryBox.classList.add("show");
+
+        setStatus(`Checking ${stores.length} stores. This may take a moment…`);
+
+        const concurrency = 8;
+        const rows = [];
+        let index = 0;
+        let completed = 0;
+
+        async function worker() {
+          while (index < stores.length) {
+            const current = stores[index++];
+            const storeId = current.storeId;
+
+            try {
+              const av = await getAvailability(storeId, sku);
+              rows.push({
+                storeId,
+                storeName: current.storeName || storeId,
+                state: current.address?.storeState || "",
+                city: current.address?.storeCity || "",
+                postcode: current.address?.storePostcode || "",
+                address: current.address?.storeAddressLine || "",
+                phone: current.contact?.storeTelephone || "",
+                qty: av.qty
+              });
+            } catch (e) {
+              rows.push({
+                storeId,
+                storeName: current.storeName || storeId,
+                state: current.address?.storeState || "",
+                city: current.address?.storeCity || "",
+                postcode: current.address?.storePostcode || "",
+                address: current.address?.storeAddressLine || "",
+                phone: current.contact?.storeTelephone || "",
+                qty: 0
+              });
+            } finally {
+              completed++;
+              setStatus(`Checked ${completed}/${stores.length} stores…`);
+            }
+          }
+        }
+
+        await Promise.all(Array.from({ length: concurrency }, worker));
+
+        lastRows = rows;
+        const withStock = rows.filter(r => r.qty > 0).length;
+        const totalStock = rows.reduce((sum, r) => sum + Math.max(0, r.qty || 0), 0);
+
+        $("storesChecked").textContent = rows.length;
+        $("storesWithStock").textContent = withStock;
+        $("totalStock").textContent = totalStock;
+
+        toolbar.classList.add("show");
+        hideStatus();
+        renderRows();
+
+      } catch (e) {
+        setStatus(e.message || "Something went wrong.", false, true);
+      } finally {
+        searchBtn.disabled = false;
+      }
+    }
+
+    searchBtn.addEventListener("click", runSearch);
+    productInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") runSearch();
+    });
+    filterInput.addEventListener("input", renderRows);
+    sortInput.addEventListener("change", renderRows);
+
+    // Optional: support shareable links like ?sku=APMJQJ3ZA&state=VIC
+    const params = new URLSearchParams(location.search);
+    const initialSku = params.get("sku");
+    const initialState = params.get("state");
+
+    if (initialSku) productInput.value = initialSku;
+    if (initialState) stateInput.value = initialState.toUpperCase();
+
+    if (initialSku) runSearch();
+  </script>
+</body>
+</html>

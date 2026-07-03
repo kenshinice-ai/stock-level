@@ -1,4 +1,4 @@
-const VERSION = "2026-07-03-v10-current-officeworks-api";
+const VERSION = "2026-07-03-v15-product-price-summary";
 
 const OW = {
   stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
@@ -410,7 +410,7 @@ function parseCurrentAvailability(raw, sku) {
 
 async function getProduct(sku) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/product-v10?sku=${sku}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/product-v15?sku=${sku}`);
 
   const cached = await cache.match(cacheKey);
   if (cached) return cached.json();
@@ -441,6 +441,8 @@ async function getProduct(sku) {
 
   const first = exact || products[0] || null;
 
+  const priceInfo = extractPriceInfo(first);
+
   const product = {
     sku,
     name: decodeHtml(
@@ -455,6 +457,9 @@ async function getProduct(sku) {
         (first && first.partNumber) ||
         sku
     ),
+    price: priceInfo.display,
+    priceValue: priceInfo.value,
+    priceSource: priceInfo.source,
     rawFound: Boolean(first)
   };
 
@@ -467,6 +472,87 @@ async function getProduct(sku) {
 
   await cache.put(cacheKey, response.clone());
   return product;
+}
+
+
+function extractPriceInfo(product) {
+  if (!product || typeof product !== "object") {
+    return { display: "", value: null, source: "none" };
+  }
+
+  const candidates = [];
+
+  function walk(value, path = "") {
+    if (value === null || typeof value === "undefined") return;
+
+    if (typeof value === "number" || typeof value === "string") {
+      if (/price|amount|sale|sell|current|was|now|value/i.test(path)) {
+        const parsed = parseMoney(value);
+        if (parsed !== null && parsed > 0 && parsed < 100000) {
+          candidates.push({ value: parsed, source: path });
+        }
+      }
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => walk(item, `${path}[${index}]`));
+      return;
+    }
+
+    if (typeof value === "object") {
+      for (const key of Object.keys(value)) {
+        walk(value[key], path ? `${path}.${key}` : key);
+      }
+    }
+  }
+
+  walk(product);
+
+  if (!candidates.length) {
+    return { display: "", value: null, source: "not-found" };
+  }
+
+  candidates.sort((a, b) => pricePriority(a.source) - pricePriority(b.source));
+
+  const best = candidates[0];
+
+  return {
+    display: formatAudPrice(best.value),
+    value: best.value,
+    source: best.source
+  };
+}
+
+function pricePriority(source) {
+  const s = String(source || "").toLowerCase();
+
+  if (s.includes("current") || s.includes("now") || s.includes("sell") || s.includes("sale")) return 0;
+  if (s.includes("price") && !s.includes("was") && !s.includes("save") && !s.includes("rrp")) return 1;
+  if (s.includes("amount") || s.includes("value")) return 2;
+  if (s.includes("was") || s.includes("rrp") || s.includes("save")) return 9;
+
+  return 5;
+}
+
+function parseMoney(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  const text = String(value || "").replace(/,/g, "").trim();
+  const match = text.match(/(?:A\$|\$)?\s*(\d+(?:\.\d{1,2})?)/i);
+
+  if (!match) return null;
+
+  const n = Number(match[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatAudPrice(value) {
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) return "";
+
+  return `$${n.toFixed(2)}`;
 }
 
 async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {

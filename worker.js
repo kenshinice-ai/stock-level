@@ -1,4 +1,4 @@
-const VERSION = "2026-07-03-v5-batched";
+const VERSION = "2026-07-03-v6-nearby-raw-debug";
 
 const OW = {
   stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
@@ -7,19 +7,11 @@ const OW = {
   availabilityBase: "https://api.officeworks.com.au/v2/availability/store"
 };
 
-const ALLOWED_STATES = new Set([
-  "all",
-  "ACT",
-  "NSW",
-  "NT",
-  "QLD",
-  "SA",
-  "TAS",
-  "VIC",
-  "WA"
-]);
+const MAX_BATCH_SIZE = 20;
 
-const MAX_BATCH_SIZE = 35;
+const ALLOWED_STATES = new Set([
+  "all", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"
+]);
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -29,13 +21,10 @@ const CORS = {
 };
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     try {
       if (request.method === "OPTIONS") {
-        return new Response(null, {
-          status: 204,
-          headers: CORS
-        });
+        return new Response(null, { status: 204, headers: CORS });
       }
 
       if (request.method !== "GET") {
@@ -43,7 +32,7 @@ export default {
       }
 
       const url = new URL(request.url);
-      const path = normalisePath(url.pathname);
+      const path = cleanPath(url.pathname);
 
       if (path.startsWith("/api/")) {
         return handleApi(request, env, url, path);
@@ -53,16 +42,13 @@ export default {
         return env.ASSETS.fetch(request);
       }
 
-      return html(fallbackHtml(), 200);
+      return html(`<h1>Stock Level Worker ${VERSION}</h1>`, 200);
     } catch (err) {
-      return json(
-        {
-          ok: false,
-          error: err && err.message ? err.message : "Unexpected worker error",
-          version: VERSION
-        },
-        500
-      );
+      return json({
+        ok: false,
+        version: VERSION,
+        error: err && err.message ? err.message : "Unexpected Worker error"
+      }, 500);
     }
   }
 };
@@ -71,9 +57,8 @@ async function handleApi(request, env, url, path) {
   if (path === "/api/health") {
     return json({
       ok: true,
-      service: "officeworks-stock-worker",
-      worker: "stock-level",
       version: VERSION,
+      service: "officeworks-stock-worker",
       hasAssetsBinding: Boolean(env && env.ASSETS),
       time: new Date().toISOString()
     });
@@ -84,24 +69,55 @@ async function handleApi(request, env, url, path) {
       ok: true,
       version: VERSION,
       maxBatchSize: MAX_BATCH_SIZE,
-      hasAssetsBinding: Boolean(env && env.ASSETS),
-      workersDevNote:
-        "Free Workers are limited to 50 external subrequests per invocation, so stock checks are batched.",
-      endpoints: OW,
-      time: new Date().toISOString()
+      note: "Use nearby postcode mode to avoid Cloudflare Free plan subrequest limits.",
+      endpoints: OW
     });
   }
 
   if (path === "/api/stores") {
     const state = normaliseState(url.searchParams.get("state") || "all");
-    const stores = await getStores(state);
+    const postcode = normalisePostcode(url.searchParams.get("postcode"));
+    const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 200, 25);
+
+    const stores = await getStores({ state, postcode, radiusKm });
 
     return json({
       ok: true,
       version: VERSION,
       state,
+      postcode,
+      radiusKm,
       count: stores.length,
       stores
+    });
+  }
+
+  if (path === "/api/store-search") {
+    const query = String(url.searchParams.get("query") || "").trim().toLowerCase();
+    const state = normaliseState(url.searchParams.get("state") || "all");
+
+    const stores = await getStores({ state });
+
+    const matches = stores.filter((store) => {
+      const haystack = [
+        store.storeName,
+        store.address,
+        store.suburb,
+        store.state,
+        store.postcode,
+        store.storeId
+      ].join(" ").toLowerCase();
+
+      return haystack.includes(query);
+    });
+
+    return json({
+      ok: true,
+      version: VERSION,
+      query,
+      state,
+      count: matches.length,
+      stores: matches
     });
   }
 
@@ -121,12 +137,37 @@ async function handleApi(request, env, url, path) {
     });
   }
 
+  if (path === "/api/raw") {
+    const sku = normaliseSku(url.searchParams.get("sku"));
+    const storeId = String(url.searchParams.get("storeId") || "").trim().toUpperCase();
+
+    if (!sku || !storeId) {
+      return json({
+        ok: false,
+        error: "Missing sku or storeId. Example: /api/raw?sku=JBAALR618B&storeId=W355"
+      }, 400);
+    }
+
+    const raw = await fetchAvailabilityRaw(storeId, sku);
+    const parsed = parseAvailability(raw);
+
+    return json({
+      ok: true,
+      version: VERSION,
+      sku,
+      storeId,
+      parsed,
+      raw
+    });
+  }
+
   if (path === "/api/check") {
     const sku = normaliseSku(url.searchParams.get("sku"));
     const state = normaliseState(url.searchParams.get("state") || "all");
+    const postcode = normalisePostcode(url.searchParams.get("postcode"));
+    const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 200, 25);
     const offset = clampInt(url.searchParams.get("offset"), 0, 100000, 0);
-    const requestedLimit = clampInt(url.searchParams.get("limit"), 1, MAX_BATCH_SIZE, MAX_BATCH_SIZE);
-    const limit = Math.min(requestedLimit, MAX_BATCH_SIZE);
+    const limit = clampInt(url.searchParams.get("limit"), 1, MAX_BATCH_SIZE, MAX_BATCH_SIZE);
 
     if (!sku) {
       return json({ ok: false, error: "Missing or invalid sku" }, 400);
@@ -136,7 +177,7 @@ async function handleApi(request, env, url, path) {
 
     const [product, stores] = await Promise.all([
       getProduct(sku),
-      getStores(state)
+      getStores({ state, postcode, radiusKm })
     ]);
 
     const totalStores = stores.length;
@@ -144,25 +185,24 @@ async function handleApi(request, env, url, path) {
     const nextOffset = offset + batchStores.length;
     const hasMore = nextOffset < totalStores;
 
-    const rows = await mapLimit(batchStores, 5, async (store) => {
-      let qty = null;
-      let status = "unknown";
+    const rows = await mapLimit(batchStores, 4, async (store) => {
+      let parsed = {
+        qty: 0,
+        status: "no_stock",
+        rawSignal: ""
+      };
+
       let error = "";
-      let rawSignal = "";
 
       try {
-        const availability = await getStockAvailability(store.storeId, sku);
-        qty = availability.qty;
-        rawSignal = availability.rawSignal || "";
-
-        if (qty === null || typeof qty === "undefined") {
-          status = availability.available ? "in_stock" : "unknown";
-        } else {
-          status = Number(qty) > 0 ? "in_stock" : "no_stock";
-        }
+        const raw = await fetchAvailabilityRaw(store.storeId, sku);
+        parsed = parseAvailability(raw);
       } catch (err) {
-        qty = null;
-        status = "error";
+        parsed = {
+          qty: null,
+          status: "error",
+          rawSignal: ""
+        };
         error = err && err.message ? err.message : "Availability lookup failed";
       }
 
@@ -174,26 +214,31 @@ async function handleApi(request, env, url, path) {
         state: store.state,
         postcode: store.postcode,
         phone: store.phone,
-        qty,
-        status,
-        rawSignal,
+        lat: store.lat,
+        lng: store.lng,
+        distanceKm: store.distanceKm,
+        qty: parsed.qty,
+        status: parsed.status,
+        rawSignal: parsed.rawSignal,
         error
       };
     });
 
     rows.sort((a, b) => {
-      const aq = qtyForSort(a);
-      const bq = qtyForSort(b);
+      if (typeof a.distanceKm === "number" && typeof b.distanceKm === "number") {
+        return a.distanceKm - b.distanceKm;
+      }
+
+      const aq = stockSortValue(a);
+      const bq = stockSortValue(b);
       return bq - aq || String(a.storeName).localeCompare(String(b.storeName));
     });
 
     const storesWithStock = rows.filter((row) => row.status === "in_stock").length;
-
     const totalVisibleStock = rows.reduce((sum, row) => {
       const qty = Number(row.qty || 0);
       return Number.isFinite(qty) ? sum + qty : sum;
     }, 0);
-
     const lookupErrors = rows.filter((row) => row.status === "error").length;
 
     return json({
@@ -201,6 +246,8 @@ async function handleApi(request, env, url, path) {
       version: VERSION,
       product,
       state,
+      postcode,
+      radiusKm,
       paging: {
         offset,
         limit,
@@ -220,18 +267,15 @@ async function handleApi(request, env, url, path) {
     });
   }
 
-  return json(
-    {
-      ok: false,
-      error: "API route not found",
-      path,
-      version: VERSION
-    },
-    404
-  );
+  return json({
+    ok: false,
+    version: VERSION,
+    error: "API route not found",
+    path
+  }, 404);
 }
 
-function normalisePath(pathname) {
+function cleanPath(pathname) {
   const path = String(pathname || "/").replace(/\/+$/, "");
   return path || "/";
 }
@@ -242,8 +286,7 @@ function normaliseSku(value) {
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
 
-  if (!/^[A-Z0-9]{4,30}$/.test(sku)) return "";
-  return sku;
+  return /^[A-Z0-9]{4,30}$/.test(sku) ? sku : "";
 }
 
 function normaliseState(value) {
@@ -255,19 +298,178 @@ function normaliseState(value) {
   return "all";
 }
 
+function normalisePostcode(value) {
+  const postcode = String(value || "").trim().replace(/[^0-9]/g, "");
+  return /^[0-9]{4}$/.test(postcode) ? postcode : "";
+}
+
 function clampInt(value, min, max, fallback) {
   const n = Number.parseInt(String(value ?? ""), 10);
 
   if (!Number.isFinite(n)) return fallback;
-  if (n < min) return min;
-  if (n > max) return max;
-
-  return n;
+  return Math.max(min, Math.min(max, n));
 }
 
-async function getStores(state = "all") {
+function clampNumber(value, min, max, fallback) {
+  const n = Number(String(value ?? ""));
+
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/stores?state=${state}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/stores-v6?state=${state}`);
+
+  let stores;
+
+  const cached = await cache.match(cacheKey);
+
+  if (cached) {
+    stores = await cached.json();
+  } else {
+    const raw = await fetchJson(OW.stores, {
+      cacheTtl: 43200,
+      label: "Officeworks stores"
+    });
+
+    const sourceStores = Array.isArray(raw && raw.stores)
+      ? raw.stores
+      : Array.isArray(raw)
+        ? raw
+        : [];
+
+    stores = sourceStores
+      .map(normaliseStore)
+      .filter((store) => store.storeId && store.storeName);
+
+    if (state !== "all") {
+      stores = stores.filter((store) => String(store.state || "").toUpperCase() === state);
+    }
+
+    const response = new Response(JSON.stringify(stores), {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "public, max-age=43200"
+      }
+    });
+
+    await cache.put(cacheKey, response.clone());
+  }
+
+  if (postcode) {
+    const centre = await geocodePostcode(postcode);
+
+    stores = stores
+      .map((store) => {
+        if (typeof store.lat !== "number" || typeof store.lng !== "number") {
+          return {
+            ...store,
+            distanceKm: null
+          };
+        }
+
+        return {
+          ...store,
+          distanceKm: round1(distanceKm(centre.lat, centre.lng, store.lat, store.lng))
+        };
+      })
+      .filter((store) => typeof store.distanceKm === "number" && store.distanceKm <= radiusKm)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+  }
+
+  return stores;
+}
+
+function normaliseStore(store) {
+  const addressObj = store && store.address ? store.address : {};
+  const contactObj = store && store.contact ? store.contact : {};
+
+  const lat = firstNumber([
+    store.latitude,
+    store.lat,
+    store.storeLatitude,
+    store.geoLat,
+    store.geoLatitude,
+    addressObj.latitude,
+    addressObj.lat,
+    addressObj.storeLatitude
+  ]);
+
+  const lng = firstNumber([
+    store.longitude,
+    store.lng,
+    store.lon,
+    store.long,
+    store.storeLongitude,
+    store.geoLng,
+    store.geoLongitude,
+    addressObj.longitude,
+    addressObj.lng,
+    addressObj.lon,
+    addressObj.storeLongitude
+  ]);
+
+  return {
+    storeId: String(
+      store.storeId ||
+      store.id ||
+      store.storeNumber ||
+      store.locationId ||
+      ""
+    ).trim().toUpperCase(),
+    storeName: decodeHtml(String(
+      store.storeName ||
+      store.name ||
+      store.displayName ||
+      ""
+    )),
+    address: decodeHtml(String(
+      addressObj.storeAddressLine ||
+      addressObj.addressLine1 ||
+      addressObj.address ||
+      ""
+    )),
+    suburb: decodeHtml(String(
+      addressObj.storeCity ||
+      addressObj.suburb ||
+      addressObj.city ||
+      ""
+    )),
+    state: String(
+      addressObj.storeState ||
+      addressObj.state ||
+      ""
+    ).toUpperCase(),
+    postcode: String(
+      addressObj.storePostcode ||
+      addressObj.postcode ||
+      ""
+    ),
+    phone: String(
+      contactObj.storeTelephone ||
+      contactObj.phone ||
+      store.phone ||
+      ""
+    ),
+    lat,
+    lng
+  };
+}
+
+function firstNumber(values) {
+  for (const value of values) {
+    const n = Number(value);
+
+    if (Number.isFinite(n)) return n;
+  }
+
+  return null;
+}
+
+async function geocodePostcode(postcode) {
+  const cache = caches.default;
+  const cacheKey = new Request(`https://stock-level-cache.local/postcode/${postcode}`);
 
   const cached = await cache.match(cacheKey);
 
@@ -275,96 +477,39 @@ async function getStores(state = "all") {
     return cached.json();
   }
 
-  const raw = await fetchJson(OW.stores, {
-    cacheTtl: 43200,
-    label: "Officeworks stores"
+  const url = `https://api.zippopotam.us/AU/${encodeURIComponent(postcode)}`;
+  const data = await fetchJson(url, {
+    cacheTtl: 86400,
+    label: `postcode geocode ${postcode}`
   });
 
-  const sourceStores = Array.isArray(raw && raw.stores)
-    ? raw.stores
-    : Array.isArray(raw)
-      ? raw
-      : [];
+  const place = Array.isArray(data.places) ? data.places[0] : null;
 
-  const stores = sourceStores
-    .map(normaliseStore)
-    .filter((store) => store.storeId && store.storeName);
+  const centre = {
+    postcode,
+    lat: Number(place && place.latitude),
+    lng: Number(place && place.longitude)
+  };
 
-  const filtered =
-    state === "all"
-      ? stores
-      : stores.filter((store) => String(store.state || "").toUpperCase() === state);
+  if (!Number.isFinite(centre.lat) || !Number.isFinite(centre.lng)) {
+    throw new Error(`Could not geocode postcode ${postcode}`);
+  }
 
-  const response = new Response(JSON.stringify(filtered), {
+  const response = new Response(JSON.stringify(centre), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "public, max-age=43200"
+      "Cache-Control": "public, max-age=86400"
     }
   });
 
   await cache.put(cacheKey, response.clone());
 
-  return filtered;
-}
-
-function normaliseStore(store) {
-  const addressObj = store && store.address ? store.address : {};
-  const contactObj = store && store.contact ? store.contact : {};
-
-  return {
-    storeId: String(
-      store.storeId ||
-        store.id ||
-        store.storeNumber ||
-        store.locationId ||
-        ""
-    ),
-    storeName: decodeHtml(
-      String(
-        store.storeName ||
-          store.name ||
-          store.displayName ||
-          ""
-      )
-    ),
-    address: decodeHtml(
-      String(
-        addressObj.storeAddressLine ||
-          addressObj.addressLine1 ||
-          addressObj.address ||
-          ""
-      )
-    ),
-    suburb: decodeHtml(
-      String(
-        addressObj.storeCity ||
-          addressObj.suburb ||
-          addressObj.city ||
-          ""
-      )
-    ),
-    state: String(
-      addressObj.storeState ||
-        addressObj.state ||
-        ""
-    ).toUpperCase(),
-    postcode: String(
-      addressObj.storePostcode ||
-        addressObj.postcode ||
-        ""
-    ),
-    phone: String(
-      contactObj.storeTelephone ||
-        contactObj.phone ||
-        store.phone ||
-        ""
-    )
-  };
+  return centre;
 }
 
 async function getProduct(sku) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/product?sku=${sku}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/product-v6?sku=${sku}`);
 
   const cached = await cache.match(cacheKey);
 
@@ -379,7 +524,7 @@ async function getProduct(sku) {
       cacheTtl: 3600,
       label: "Officeworks product search"
     });
-  } catch (err) {
+  } catch {
     data = null;
   }
 
@@ -388,9 +533,9 @@ async function getProduct(sku) {
   const exact = products.find((product) => {
     const partNumber = String(
       (product.identity && product.identity.partNumber) ||
-        product.partNumber ||
-        product.sku ||
-        ""
+      product.partNumber ||
+      product.sku ||
+      ""
     ).toUpperCase();
 
     return partNumber === sku;
@@ -400,17 +545,15 @@ async function getProduct(sku) {
 
   const product = {
     sku,
-    name: decodeHtml(
-      String(
-        (first && first.identity && first.identity.name) ||
-          (first && first.name) ||
-          sku
-      )
-    ),
+    name: decodeHtml(String(
+      (first && first.identity && first.identity.name) ||
+      (first && first.name) ||
+      sku
+    )),
     partNumber: String(
       (first && first.identity && first.identity.partNumber) ||
-        (first && first.partNumber) ||
-        sku
+      (first && first.partNumber) ||
+      sku
     ),
     rawFound: Boolean(first)
   };
@@ -427,110 +570,152 @@ async function getProduct(sku) {
   return product;
 }
 
-async function getStockAvailability(storeId, sku) {
-  const url = `${OW.availabilityBase}/${encodeURIComponent(
-    storeId
-  )}?partNumber=${encodeURIComponent(sku)}`;
+async function fetchAvailabilityRaw(storeId, sku) {
+  const url = `${OW.availabilityBase}/${encodeURIComponent(storeId)}?partNumber=${encodeURIComponent(sku)}`;
 
-  const data = await fetchJson(url, {
+  return fetchJson(url, {
     cacheTtl: 0,
-    label: `Officeworks availability store ${storeId}`
+    label: `availability ${storeId}/${sku}`
   });
-
-  return extractAvailability(data);
 }
 
-function extractAvailability(data) {
-  const flat = flattenAvailability(data);
+function parseAvailability(raw) {
+  const objects = flattenObjects(raw);
 
-  let bestQty = null;
-  let available = false;
-  let rawSignal = "";
+  let bestQty = 0;
+  let sawQty = false;
+  let sawPositiveBoolean = false;
+  let sawStoreRelevant = false;
+  const signals = [];
 
-  for (const item of flat) {
-    const fields = [
-      item.qty,
-      item.quantity,
-      item.stock,
-      item.availableQuantity,
-      item.availableQty,
-      item.stockLevel,
-      item.onHand,
-      item.onHandQty,
-      item.storeStock,
-      item.storeQuantity
+  for (const obj of objects) {
+    const jsonText = JSON.stringify(obj).toLowerCase();
+
+    const typeText = [
+      obj.type,
+      obj.fulfilmentType,
+      obj.fulfillmentType,
+      obj.deliveryMode,
+      obj.channel,
+      obj.option,
+      obj.name,
+      obj.label
+    ].map((x) => String(x || "").toLowerCase()).join(" ");
+
+    const storeRelevant =
+      typeText.includes("store") ||
+      typeText.includes("pickup") ||
+      typeText.includes("collect") ||
+      jsonText.includes("in-store") ||
+      jsonText.includes("instore") ||
+      jsonText.includes("click and collect") ||
+      jsonText.includes("pickup");
+
+    if (storeRelevant) {
+      sawStoreRelevant = true;
+    }
+
+    const qtyKeys = [
+      "qty",
+      "quantity",
+      "stock",
+      "availableQuantity",
+      "availableQty",
+      "stockLevel",
+      "onHand",
+      "onHandQty",
+      "storeStock",
+      "storeQuantity",
+      "ats",
+      "availableToSell"
     ];
 
-    for (const field of fields) {
-      const qty = parseQty(field);
+    for (const key of qtyKeys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const qty = parseQty(obj[key]);
 
-      if (qty !== null) {
-        bestQty = Math.max(bestQty ?? 0, qty);
+        if (qty !== null) {
+          sawQty = true;
+          bestQty = Math.max(bestQty, qty);
 
-        if (qty > 0) {
-          available = true;
+          if (qty > 0) {
+            signals.push(`${key}:${qty}`);
+          }
         }
       }
     }
 
-    const textBlob = JSON.stringify(item).toLowerCase();
+    const booleanKeys = [
+      "available",
+      "isAvailable",
+      "inStock",
+      "isInStock",
+      "canCollect",
+      "isCollectable",
+      "collectAvailable",
+      "pickupAvailable"
+    ];
 
-    if (
-      textBlob.includes("in stock") ||
-      textBlob.includes("available") ||
-      textBlob.includes("collect today") ||
-      textBlob.includes("click and collect")
-    ) {
-      available = true;
-      rawSignal = rawSignal || "availability text signal";
+    for (const key of booleanKeys) {
+      if (obj[key] === true) {
+        sawPositiveBoolean = true;
+        signals.push(`${key}:true`);
+      }
     }
 
     if (
-      textBlob.includes("out of stock") ||
-      textBlob.includes("unavailable")
+      jsonText.includes('"status":"available"') ||
+      jsonText.includes('"availability":"available"') ||
+      jsonText.includes("available today") ||
+      jsonText.includes("in stock")
     ) {
-      rawSignal = rawSignal || "unavailable text signal";
+      sawPositiveBoolean = true;
+      signals.push("text:available");
     }
   }
 
-  if (available && (bestQty === null || bestQty === 0)) {
+  if (bestQty > 0) {
     return {
       qty: bestQty,
-      available: true,
-      rawSignal: rawSignal || "available without visible quantity"
+      status: "in_stock",
+      rawSignal: uniqueSignals(signals).join(", ")
+    };
+  }
+
+  if (!sawQty && sawPositiveBoolean && sawStoreRelevant) {
+    return {
+      qty: null,
+      status: "in_stock",
+      rawSignal: uniqueSignals(signals).join(", ") || "available boolean signal"
     };
   }
 
   return {
-    qty: bestQty === null ? 0 : bestQty,
-    available,
-    rawSignal
+    qty: sawQty ? bestQty : 0,
+    status: "no_stock",
+    rawSignal: uniqueSignals(signals).join(", ")
   };
 }
 
-function flattenAvailability(data) {
+function flattenObjects(value) {
   const out = [];
 
-  function walk(value) {
-    if (!value || typeof value !== "object") return;
+  function walk(v) {
+    if (!v || typeof v !== "object") return;
 
-    if (Array.isArray(value)) {
-      for (const item of value) walk(item);
+    if (Array.isArray(v)) {
+      for (const item of v) walk(item);
       return;
     }
 
-    out.push(value);
+    out.push(v);
 
-    for (const key of Object.keys(value)) {
-      const child = value[key];
-
-      if (child && typeof child === "object") {
-        walk(child);
-      }
+    for (const key of Object.keys(v)) {
+      walk(v[key]);
     }
   }
 
-  walk(data);
+  walk(value);
 
   return out;
 }
@@ -543,39 +728,31 @@ function parseQty(value) {
   }
 
   if (typeof value === "string") {
-    const trimmed = value.trim();
+    const direct = Number(value.trim());
 
-    if (!trimmed) return null;
+    if (Number.isFinite(direct)) return direct;
 
-    const direct = Number(trimmed);
-
-    if (Number.isFinite(direct)) {
-      return direct;
-    }
-
-    const match = trimmed.match(/\d+/);
+    const match = value.match(/\d+/);
 
     if (match) {
       const n = Number(match[0]);
-
-      if (Number.isFinite(n)) {
-        return n;
-      }
+      if (Number.isFinite(n)) return n;
     }
   }
 
   return null;
 }
 
-function qtyForSort(row) {
-  if (!row) return -1;
+function uniqueSignals(signals) {
+  return Array.from(new Set(signals.filter(Boolean))).slice(0, 8);
+}
+
+function stockSortValue(row) {
+  if (!row) return 0;
   if (row.status === "in_stock" && (row.qty === null || typeof row.qty === "undefined")) return 1;
 
   const qty = Number(row.qty || 0);
-
-  if (!Number.isFinite(qty)) return 0;
-
-  return qty;
+  return Number.isFinite(qty) ? qty : 0;
 }
 
 async function fetchJson(url, options = {}) {
@@ -586,18 +763,12 @@ async function fetchJson(url, options = {}) {
     method: "GET",
     headers: {
       "Accept": "application/json,text/plain,*/*",
-      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/5.0",
+      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/6.0",
       "Referer": "https://www.officeworks.com.au/"
     },
-    cf:
-      cacheTtl > 0
-        ? {
-            cacheTtl,
-            cacheEverything: true
-          }
-        : {
-            cacheTtl: 0
-          }
+    cf: cacheTtl > 0
+      ? { cacheTtl, cacheEverything: true }
+      : { cacheTtl: 0 }
   });
 
   const text = await response.text();
@@ -608,7 +779,7 @@ async function fetchJson(url, options = {}) {
 
   try {
     return JSON.parse(text);
-  } catch (err) {
+  } catch {
     throw new Error(`${label} returned non-JSON response: ${text.slice(0, 240)}`);
   }
 }
@@ -617,23 +788,40 @@ async function mapLimit(items, limit, mapper) {
   const results = new Array(items.length);
   let index = 0;
 
-  async function runWorker() {
+  async function runner() {
     while (index < items.length) {
-      const currentIndex = index++;
-      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      const i = index++;
+      results[i] = await mapper(items[i], i);
     }
   }
 
-  const workers = Array.from(
-    {
-      length: Math.min(limit, items.length)
-    },
-    () => runWorker()
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => runner())
   );
 
-  await Promise.all(workers);
-
   return results;
+}
+
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const r = 6371;
+  const dLat = deg2rad(lat2 - lat1);
+  const dLng = deg2rad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) *
+    Math.cos(deg2rad(lat2)) *
+    Math.sin(dLng / 2) *
+    Math.sin(dLng / 2);
+
+  return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function deg2rad(deg) {
+  return deg * (Math.PI / 180);
+}
+
+function round1(n) {
+  return Math.round(n * 10) / 10;
 }
 
 function decodeHtml(value) {
@@ -666,19 +854,4 @@ function html(markup, status = 200) {
       "Cache-Control": "no-store"
     }
   });
-}
-
-function fallbackHtml() {
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Stock Level Worker</title>
-</head>
-<body>
-  <h1>Stock Level Worker is running.</h1>
-  <p>Try <code>/api/health</code> or <code>/api/check?sku=KEJITAPECLR&state=all&offset=0&limit=35</code>.</p>
-  <p>Version: ${VERSION}</p>
-</body>
-</html>`;
 }

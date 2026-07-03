@@ -165,6 +165,7 @@
       color: var(--muted);
       font-size: 14px;
       line-height: 1.5;
+      overflow-wrap: anywhere;
     }
 
     .status.show {
@@ -193,14 +194,25 @@
       font-weight: 800;
     }
 
-    .ok-text {
-      color: var(--green);
-      font-weight: 800;
+    .progress {
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(15, 23, 42, .08);
+      margin-top: 10px;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(135deg, var(--blue), var(--blue2));
+      transition: width .2s ease;
     }
 
     .summary {
       display: none;
-      grid-template-columns: 1.5fr repeat(3, 1fr);
+      grid-template-columns: 1.5fr repeat(4, 1fr);
       gap: 12px;
       margin-top: 16px;
     }
@@ -209,7 +221,7 @@
       display: grid;
     }
 
-    @media (max-width: 900px) {
+    @media (max-width: 980px) {
       .summary {
         grid-template-columns: repeat(2, 1fr);
       }
@@ -384,7 +396,7 @@
       <div class="search-grid">
         <input
           id="productInput"
-          placeholder="Paste Officeworks product URL or SKU, e.g. IP1725MB"
+          placeholder="Paste Officeworks product URL or SKU, e.g. KEJITAPECLR"
           autocomplete="off"
         />
 
@@ -404,13 +416,19 @@
       </div>
 
       <div class="hint">
-        数据通过当前 Cloudflare Worker 的 <code>/api/check</code> 实时读取。库存仅供参考，最终以 Officeworks 官网结账、Click & Collect 或门店确认为准。
+        API endpoint:
+        <code id="apiBaseText">detecting...</code>
+        <br />
+        已改为分批查询，避免 Cloudflare Free plan 单次 50 subrequests 限制。库存仅供参考，最终以 Officeworks 官网结账、Click & Collect 或门店确认为准。
       </div>
     </section>
 
     <section id="status" class="card status">
       <div class="spinner"></div>
-      <div id="statusText">Loading…</div>
+      <div style="width:100%;">
+        <div id="statusText">Loading…</div>
+        <div class="progress"><span id="progressBar"></span></div>
+      </div>
     </section>
 
     <section id="summary" class="summary">
@@ -430,8 +448,13 @@
       </div>
 
       <div class="card metric">
-        <div class="label">Total visible stock</div>
+        <div class="label">Visible stock</div>
         <div id="totalStock" class="num">0</div>
+      </div>
+
+      <div class="card metric">
+        <div class="label">Lookup errors</div>
+        <div id="lookupErrors" class="num">0</div>
       </div>
     </section>
 
@@ -457,14 +480,22 @@
     <section class="footer">
       This tool is not affiliated with Officeworks. Please use lightly and respectfully.
       <br />
-      Shareable query format: <code>?sku=IP1725MB&state=VIC</code>
+      Shareable query format: <code>?sku=KEJITAPECLR&state=VIC</code>
       <br />
-      API test: <code>/api/health</code>, <code>/api/check?sku=IP1725MB&state=VIC</code>
+      API tests:
+      <code>/api/health</code>,
+      <code>/api/debug</code>,
+      <code>/api/check?sku=KEJITAPECLR&state=VIC&offset=0&limit=35</code>
     </section>
   </main>
 
   <script>
-    const API_BASE = "";
+    const WORKER_ORIGIN = "https://stock-level.lee-liu-melbourne.workers.dev";
+    const BATCH_LIMIT = 35;
+
+    const API_BASE = location.hostname.endsWith("workers.dev")
+      ? ""
+      : WORKER_ORIGIN;
 
     const $ = (id) => document.getElementById(id);
 
@@ -473,6 +504,7 @@
     const searchBtn = $("searchBtn");
     const statusBox = $("status");
     const statusText = $("statusText");
+    const progressBar = $("progressBar");
     const summaryBox = $("summary");
     const toolbar = $("toolbar");
     const resultsBox = $("results");
@@ -484,6 +516,8 @@
     let lastData = null;
     let lastRows = [];
 
+    $("apiBaseText").textContent = API_BASE || "same-origin /api";
+
     function escapeHtml(value) {
       return String(value ?? "")
         .replaceAll("&", "&amp;")
@@ -493,21 +527,27 @@
         .replaceAll("'", "&#039;");
     }
 
-    function setStatus(message, loading = true, isError = false) {
+    function setStatus(message, loading = true, isError = false, progress = null) {
       statusBox.classList.add("show");
       statusBox.querySelector(".spinner").style.display = loading ? "block" : "none";
 
       statusText.innerHTML = isError
         ? `<span class="error">${escapeHtml(message)}</span>`
         : escapeHtml(message);
+
+      if (typeof progress === "number") {
+        progressBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+      }
     }
 
     function hideStatus() {
       statusBox.classList.remove("show");
+      progressBar.style.width = "0%";
     }
 
     function extractSku(input) {
       const raw = String(input || "").trim();
+
       if (!raw) return "";
 
       try {
@@ -552,7 +592,7 @@
           }
         });
       } catch (err) {
-        throw new Error(`Network fetch failed. Target: ${target}`);
+        throw new Error(`Network fetch failed. Target: ${target}. Browser message: ${err.message || err}`);
       }
 
       const text = await response.text();
@@ -563,6 +603,7 @@
         payload = JSON.parse(text);
       } catch (err) {
         payload = {
+          ok: false,
           error: text || `Non-JSON response from ${target}`
         };
       }
@@ -576,8 +617,10 @@
 
     function stockClass(row) {
       if (!row || row.status === "error") return "stock-error";
+
       const qty = row.qty;
 
+      if (row.status === "in_stock" && (qty === null || typeof qty === "undefined")) return "stock-ok";
       if (qty === null || qty === undefined) return "stock-unknown";
       if (qty >= 5) return "stock-ok";
       if (qty > 0) return "stock-low";
@@ -591,6 +634,8 @@
 
       const qty = row.qty;
 
+      if (row.status === "in_stock" && (qty === null || typeof qty === "undefined")) return "In stock";
+      if (row.status === "in_stock" && Number(qty || 0) === 0) return "In stock";
       if (qty === null || qty === undefined) return "Unknown";
       if (qty >= 5) return `${qty} in stock`;
       if (qty > 0) return `${qty} low stock`;
@@ -600,9 +645,10 @@
 
     async function checkHealth() {
       try {
-        await apiGet("/api/health");
+        const health = await apiGet("/api/health");
+        console.log("Worker health:", health);
       } catch (err) {
-        setStatus(`Worker health check failed: ${err.message}`, false, true);
+        setStatus(`Worker health check failed: ${err.message}`, false, true, 0);
       }
     }
 
@@ -611,7 +657,7 @@
       const state = stateInput.value;
 
       if (!sku) {
-        setStatus("Please enter an Officeworks product URL or SKU.", false, true);
+        setStatus("Please enter an Officeworks product URL or SKU.", false, true, 0);
         return;
       }
 
@@ -628,44 +674,92 @@
       history.replaceState(null, "", pageUrl.toString());
 
       try {
-        setStatus(`Checking ${sku} stock in ${state === "all" ? "all states" : state}…`);
+        setStatus(`Preparing stock check for ${sku}…`, true, false, 3);
 
-        const data = await apiGet(
-          `/api/check?sku=${encodeURIComponent(sku)}&state=${encodeURIComponent(state)}`
-        );
+        let offset = 0;
+        let hasMore = true;
+        let totalStores = null;
+        let product = null;
+        const allRows = [];
+        let batchIndex = 0;
 
-        lastData = data;
-        lastRows = Array.isArray(data.rows) ? data.rows : [];
+        while (hasMore) {
+          batchIndex += 1;
 
-        $("productName").textContent = data.product && data.product.name
-          ? data.product.name
-          : sku;
+          const data = await apiGet(
+            `/api/check?sku=${encodeURIComponent(sku)}&state=${encodeURIComponent(state)}&offset=${offset}&limit=${BATCH_LIMIT}`
+          );
 
-        $("storesChecked").textContent =
-          data.summary && typeof data.summary.storesChecked !== "undefined"
-            ? data.summary.storesChecked
-            : lastRows.length;
+          if (!product) {
+            product = data.product;
+          }
 
-        $("storesWithStock").textContent =
-          data.summary && typeof data.summary.storesWithStock !== "undefined"
-            ? data.summary.storesWithStock
-            : 0;
+          const rows = Array.isArray(data.rows) ? data.rows : [];
+          allRows.push(...rows);
 
-        $("totalStock").textContent =
-          data.summary && typeof data.summary.totalVisibleStock !== "undefined"
-            ? data.summary.totalVisibleStock
-            : 0;
+          totalStores = data.paging && typeof data.paging.totalStores === "number"
+            ? data.paging.totalStores
+            : allRows.length;
 
-        summaryBox.classList.add("show");
-        toolbar.classList.add("show");
+          offset = data.paging && typeof data.paging.nextOffset === "number"
+            ? data.paging.nextOffset
+            : offset + rows.length;
 
+          hasMore = Boolean(data.paging && data.paging.hasMore);
+
+          const progress = totalStores > 0
+            ? Math.round((Math.min(offset, totalStores) / totalStores) * 100)
+            : 50;
+
+          setStatus(
+            `Batch ${batchIndex}: checked ${Math.min(offset, totalStores)}/${totalStores} stores for ${sku}…`,
+            true,
+            false,
+            progress
+          );
+
+          lastData = {
+            product,
+            state,
+            rows: allRows
+          };
+          lastRows = allRows;
+
+          updateSummary(product, allRows);
+          summaryBox.classList.add("show");
+          toolbar.classList.add("show");
+          renderRows();
+
+          await sleep(120);
+        }
+
+        updateSummary(product, allRows);
         hideStatus();
         renderRows();
       } catch (err) {
-        setStatus(err.message || "Something went wrong.", false, true);
+        setStatus(err.message || "Something went wrong.", false, true, 0);
       } finally {
         searchBtn.disabled = false;
       }
+    }
+
+    function updateSummary(product, rows) {
+      const storesChecked = rows.length;
+      const storesWithStock = rows.filter((row) => row.status === "in_stock").length;
+      const totalVisibleStock = rows.reduce((sum, row) => {
+        const qty = Number(row.qty || 0);
+        return Number.isFinite(qty) ? sum + qty : sum;
+      }, 0);
+      const lookupErrors = rows.filter((row) => row.status === "error").length;
+
+      $("productName").textContent = product && product.name
+        ? product.name
+        : extractSku(productInput.value);
+
+      $("storesChecked").textContent = storesChecked;
+      $("storesWithStock").textContent = storesWithStock;
+      $("totalStock").textContent = totalVisibleStock;
+      $("lookupErrors").textContent = lookupErrors;
     }
 
     function renderRows() {
@@ -676,7 +770,7 @@
       let rows = [...lastRows];
 
       if (onlyStock) {
-        rows = rows.filter((row) => Number(row.qty || 0) > 0);
+        rows = rows.filter((row) => row.status === "in_stock" || Number(row.qty || 0) > 0);
       }
 
       if (query) {
@@ -698,8 +792,8 @@
       }
 
       rows.sort((a, b) => {
-        const aq = Number(a.qty || 0);
-        const bq = Number(b.qty || 0);
+        const aq = qtyForSort(a);
+        const bq = qtyForSort(b);
 
         if (sort === "stock-desc") {
           return bq - aq || String(a.storeName).localeCompare(String(b.storeName));
@@ -730,6 +824,10 @@
             ? `<br />Error: ${escapeHtml(row.error)}`
             : "";
 
+          const signalLine = row.rawSignal
+            ? `<br />Signal: ${escapeHtml(row.rawSignal)}`
+            : "";
+
           return `
             <article class="card store">
               <div>
@@ -740,6 +838,7 @@
                   ${escapeHtml([row.suburb, row.state, row.postcode].filter(Boolean).join(" "))}
                   ${row.phone ? `<br />Phone: ${escapeHtml(row.phone)}` : ""}
                   ${row.storeId ? `<br />Store ID: ${escapeHtml(row.storeId)}` : ""}
+                  ${signalLine}
                   ${detailLine}
                 </div>
               </div>
@@ -749,6 +848,17 @@
           `;
         })
         .join("");
+    }
+
+    function qtyForSort(row) {
+      if (!row) return -1;
+      if (row.status === "in_stock" && Number(row.qty || 0) === 0) return 1;
+
+      const qty = Number(row.qty || 0);
+
+      if (!Number.isFinite(qty)) return 0;
+
+      return qty;
     }
 
     function exportCsv() {
@@ -766,6 +876,7 @@
         "Phone",
         "Qty",
         "Status",
+        "Signal",
         "Error"
       ];
 
@@ -787,6 +898,7 @@
             row.phone,
             row.qty,
             row.status,
+            row.rawSignal,
             row.error
           ]
             .map(csvCell)
@@ -814,6 +926,10 @@
       return `"${text.replaceAll('"', '""')}"`;
     }
 
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
     searchBtn.addEventListener("click", runSearch);
 
     productInput.addEventListener("keydown", (event) => {
@@ -836,7 +952,7 @@
     }
 
     if (initialState) {
-      stateInput.value = initialState;
+      stateInput.value = initialState.toUpperCase();
     }
 
     checkHealth();

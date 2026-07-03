@@ -1,246 +1,313 @@
 <!doctype html>
-<html lang="zh-Hans">
+<html lang="en-AU">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Officeworks Stock Level Checker</title>
+  <title>Check Officeworks stock by store - Designed by Lee</title>
+  <meta name="description" content="Check Officeworks product stock by store. Designed by Lee." />
 
   <style>
     :root {
-      --bg: #e9f4fb;
-      --card: rgba(255,255,255,.92);
+      --bg: #eef6fb;
+      --surface: rgba(255, 255, 255, 0.82);
+      --surface-solid: #ffffff;
       --text: #0f172a;
-      --muted: #667085;
-      --border: #e5e7eb;
-      --blue: #2563eb;
-      --blue2: #1d4ed8;
+      --muted: #64748b;
+      --soft: #f8fafc;
+      --border: rgba(148, 163, 184, 0.26);
+      --blue: #155eef;
+      --blue-dark: #0f3fb6;
       --green: #16a34a;
-      --red: #dc2626;
+      --green-bg: rgba(22, 163, 74, 0.12);
       --orange: #f97316;
-      --shadow: 0 18px 45px rgba(15,23,42,.08);
-      --radius: 24px;
+      --orange-bg: rgba(249, 115, 22, 0.13);
+      --red: #dc2626;
+      --red-bg: rgba(220, 38, 38, 0.1);
+      --shadow: 0 22px 60px rgba(15, 23, 42, 0.1);
+      --shadow-soft: 0 12px 34px rgba(15, 23, 42, 0.08);
+      --radius-xl: 30px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
 
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
+      font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
       background:
-        radial-gradient(circle at 12% 8%, rgba(37,99,235,.13), transparent 30%),
-        radial-gradient(circle at 88% 10%, rgba(22,163,74,.10), transparent 28%),
-        linear-gradient(180deg, #f7fbff, var(--bg));
+        radial-gradient(circle at 12% 12%, rgba(37, 99, 235, 0.16), transparent 30%),
+        radial-gradient(circle at 82% 10%, rgba(20, 184, 166, 0.14), transparent 28%),
+        radial-gradient(circle at 50% 100%, rgba(59, 130, 246, 0.1), transparent 35%),
+        linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
     }
 
     .wrap {
       width: min(1180px, calc(100% - 32px));
       margin: 0 auto;
-      padding: 36px 0 54px;
+      padding: 34px 0 56px;
     }
 
-    .badge {
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 42px;
+    }
+
+    .brand-pill {
       display: inline-flex;
       align-items: center;
-      width: fit-content;
-      padding: 8px 13px;
-      border: 1px solid rgba(37,99,235,.18);
+      gap: 9px;
+      padding: 9px 14px;
+      border: 1px solid rgba(37, 99, 235, 0.18);
       border-radius: 999px;
-      background: rgba(255,255,255,.76);
-      color: var(--blue2);
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+      backdrop-filter: blur(16px);
+      color: var(--blue-dark);
       font-size: 13px;
-      font-weight: 800;
+      font-weight: 900;
+      letter-spacing: -0.01em;
+    }
+
+    .designer {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .hero {
+      max-width: 960px;
+      margin-bottom: 28px;
     }
 
     h1 {
-      margin: 18px 0 14px;
-      max-width: 880px;
-      font-size: clamp(38px, 6vw, 74px);
-      line-height: .96;
-      letter-spacing: -.06em;
+      margin: 0;
+      font-size: clamp(42px, 7vw, 82px);
+      line-height: 0.94;
+      letter-spacing: -0.075em;
+      font-weight: 950;
+    }
+
+    .hero h1 span {
+      display: block;
     }
 
     .sub {
-      max-width: 850px;
-      margin: 0 0 26px;
+      max-width: 760px;
+      margin: 18px 0 0;
       color: var(--muted);
       font-size: 17px;
-      line-height: 1.6;
-    }
-
-    .card {
-      background: var(--card);
-      border: 1px solid rgba(229,231,235,.9);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(14px);
+      line-height: 1.65;
+      font-weight: 560;
     }
 
     .panel {
       padding: 18px;
-      display: grid;
-      gap: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
     }
 
     .search-grid {
       display: grid;
-      grid-template-columns: 1fr 140px 130px 130px 150px;
+      grid-template-columns: minmax(260px, 1fr) 135px 130px 130px 150px;
       gap: 12px;
+      align-items: center;
     }
 
-    @media (max-width: 980px) {
-      .search-grid { grid-template-columns: 1fr 1fr; }
-    }
-
-    @media (max-width: 560px) {
-      .search-grid { grid-template-columns: 1fr; }
-    }
-
-    input, select, button {
+    input,
+    select,
+    button {
       width: 100%;
-      min-height: 52px;
-      border-radius: 16px;
+      min-height: 54px;
+      border-radius: var(--radius-md);
       border: 1px solid var(--border);
-      padding: 0 14px;
+      padding: 0 15px;
       font-size: 15px;
-      background: white;
       outline: none;
+      background: var(--surface-solid);
+      color: var(--text);
     }
 
-    input:focus, select:focus {
-      border-color: rgba(37,99,235,.55);
-      box-shadow: 0 0 0 4px rgba(37,99,235,.12);
+    input::placeholder {
+      color: #94a3b8;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: rgba(21, 94, 239, 0.55);
+      box-shadow: 0 0 0 4px rgba(21, 94, 239, 0.1);
     }
 
     button {
-      border: 0;
+      border: none;
       cursor: pointer;
       color: white;
       font-weight: 900;
-      background: linear-gradient(135deg, var(--blue), var(--blue2));
+      letter-spacing: -0.01em;
+      background: linear-gradient(135deg, var(--blue), var(--blue-dark));
+      box-shadow: 0 14px 28px rgba(21, 94, 239, 0.26);
+      transition: transform 0.14s ease, opacity 0.14s ease, box-shadow 0.14s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 34px rgba(21, 94, 239, 0.3);
     }
 
     button:disabled {
-      opacity: .55;
+      opacity: 0.55;
       cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
 
     .hint {
+      margin-top: 13px;
       color: var(--muted);
       font-size: 13px;
-      line-height: 1.6;
+      line-height: 1.55;
+    }
+
+    code {
+      padding: 2px 7px;
+      border-radius: 7px;
+      background: rgba(15, 23, 42, 0.06);
+      color: #334155;
+      font-size: 12px;
     }
 
     .status {
       display: none;
       margin-top: 16px;
       padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
       color: var(--muted);
       overflow-wrap: anywhere;
+      backdrop-filter: blur(18px);
     }
 
-    .status.show { display: block; }
+    .status.show {
+      display: block;
+    }
 
     .error {
       color: var(--red);
-      font-weight: 800;
+      font-weight: 900;
     }
 
     .progress {
       height: 10px;
+      margin-top: 12px;
       border-radius: 999px;
       overflow: hidden;
-      background: rgba(15,23,42,.08);
-      margin-top: 10px;
+      background: rgba(15, 23, 42, 0.08);
     }
 
     .progress span {
       display: block;
       height: 100%;
       width: 0%;
-      background: linear-gradient(135deg, var(--blue), var(--blue2));
-      transition: width .2s ease;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--blue), var(--blue-dark));
+      transition: width 0.2s ease;
     }
 
     .summary {
       display: none;
-      grid-template-columns: 1.4fr repeat(5, 1fr);
+      grid-template-columns: 1.5fr repeat(4, 1fr);
       gap: 12px;
       margin-top: 16px;
     }
 
-    .summary.show { display: grid; }
-
-    @media (max-width: 1080px) {
-      .summary { grid-template-columns: repeat(2, 1fr); }
-    }
-
-    @media (max-width: 560px) {
-      .summary { grid-template-columns: 1fr; }
+    .summary.show {
+      display: grid;
     }
 
     .metric {
+      min-height: 104px;
       padding: 18px;
-      min-height: 100px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(18px);
     }
 
-    .label {
+    .metric-label {
+      margin-bottom: 7px;
       color: var(--muted);
       font-size: 13px;
-      margin-bottom: 7px;
+      font-weight: 760;
     }
 
-    .num {
-      font-size: 32px;
+    .metric-value {
+      font-size: 34px;
+      line-height: 1;
       font-weight: 950;
-      letter-spacing: -.04em;
+      letter-spacing: -0.05em;
     }
 
     .product-title {
       font-size: 17px;
-      line-height: 1.32;
-      font-weight: 900;
-    }
-
-    .small-value {
-      font-size: 14px;
-      line-height: 1.35;
-      font-weight: 800;
+      line-height: 1.3;
+      font-weight: 950;
+      letter-spacing: -0.03em;
     }
 
     .toolbar {
       display: none;
-      grid-template-columns: 1fr 180px 160px 160px;
+      grid-template-columns: minmax(260px, 1fr) 190px 165px 150px;
       gap: 12px;
       margin-top: 16px;
     }
 
-    .toolbar.show { display: grid; }
-
-    @media (max-width: 840px) {
-      .toolbar { grid-template-columns: 1fr 1fr; }
-    }
-
-    @media (max-width: 560px) {
-      .toolbar { grid-template-columns: 1fr; }
+    .toolbar.show {
+      display: grid;
     }
 
     .checkbox-line {
-      min-height: 52px;
+      min-height: 54px;
       border: 1px solid var(--border);
-      border-radius: 16px;
-      background: white;
+      border-radius: var(--radius-md);
+      background: var(--surface-solid);
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 10px;
       padding: 0 14px;
       color: var(--muted);
+      font-size: 14px;
+      font-weight: 760;
     }
 
     .checkbox-line input {
       width: 18px;
       min-height: 18px;
+      padding: 0;
+      box-shadow: none;
     }
 
     .results {
@@ -250,44 +317,119 @@
     }
 
     .store {
-      padding: 16px 18px;
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 14px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
       align-items: center;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(18px);
     }
 
-    @media (max-width: 660px) {
-      .store { grid-template-columns: 1fr; }
+    .store-main {
+      min-width: 0;
+    }
+
+    .store-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
     }
 
     .store h3 {
-      margin: 0 0 5px;
-      font-size: 17px;
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: -0.035em;
+      font-weight: 950;
     }
 
-    .meta {
+    .distance-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.06);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .store-meta {
+      display: grid;
+      gap: 5px;
       color: var(--muted);
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.42;
+      font-weight: 560;
     }
 
-    .pill {
+    .store-meta strong {
+      color: #334155;
+      font-weight: 850;
+    }
+
+    .stock-block {
+      display: grid;
+      gap: 8px;
+      min-width: 230px;
+      justify-items: end;
+    }
+
+    .stock-badge {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 112px;
-      padding: 10px 13px;
+      min-width: 122px;
+      padding: 10px 14px;
       border-radius: 999px;
-      font-weight: 950;
       font-size: 14px;
+      font-weight: 950;
       white-space: nowrap;
     }
 
-    .stock-ok { background: rgba(22,163,74,.12); color: var(--green); }
-    .stock-low { background: rgba(249,115,22,.14); color: var(--orange); }
-    .stock-none { background: rgba(220,38,38,.10); color: var(--red); }
-    .stock-error, .stock-unknown { background: rgba(107,114,128,.12); color: #374151; }
+    .stock-ok {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    .stock-low {
+      background: var(--orange-bg);
+      color: var(--orange);
+    }
+
+    .stock-none {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .stock-error,
+    .stock-unknown {
+      background: rgba(107, 114, 128, 0.12);
+      color: #374151;
+    }
+
+    .stock-mini {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .mini-pill {
+      padding: 6px 8px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.05);
+      color: #475569;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
 
     .footer {
       margin-top: 24px;
@@ -296,25 +438,88 @@
       line-height: 1.6;
     }
 
-    code {
-      background: rgba(15,23,42,.06);
-      border-radius: 7px;
-      padding: 2px 6px;
+    .footer strong {
+      color: #334155;
+    }
+
+    @media (max-width: 980px) {
+      .search-grid,
+      .toolbar {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .summary {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 700px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 30px;
+      }
+
+      .store {
+        grid-template-columns: 1fr;
+      }
+
+      .stock-block {
+        min-width: 0;
+        justify-items: start;
+      }
+
+      .stock-mini {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .wrap {
+        width: min(100% - 22px, 1180px);
+        padding-top: 22px;
+      }
+
+      .search-grid,
+      .toolbar,
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: clamp(40px, 12vw, 62px);
+      }
+
+      .panel {
+        padding: 14px;
+      }
+
+      .metric,
+      .store {
+        padding: 16px;
+      }
     }
   </style>
 </head>
 
 <body>
   <main class="wrap">
-    <div class="badge">📦 Officeworks Stock Level Checker</div>
+    <header class="topbar">
+      <div class="brand-pill">📦 Officeworks Stock Level Checker</div>
+      <div class="designer">Designed by Lee</div>
+    </header>
 
-    <h1>Check Officeworks stock by store.</h1>
+    <section class="hero">
+      <h1>
+        <span>Check Officeworks</span>
+        <span>stock by store.</span>
+      </h1>
+      <p class="sub">
+        Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.
+      </p>
+    </section>
 
-    <p class="sub">
-      当前版本会先解析 Officeworks 可见产品代码，再尝试找到 availability API 真正接受的 stock partNumber。
-    </p>
-
-    <section class="card panel">
+    <section class="panel">
       <div class="search-grid">
         <input id="productInput" placeholder="Officeworks URL or SKU, e.g. JBAALR618B" autocomplete="off" />
 
@@ -345,47 +550,39 @@
       </div>
 
       <div class="hint">
-        API endpoint: <code id="apiBaseText">detecting...</code>
-        <br />
-        Raw debug:
-        <code>/api/raw?sku=JBAALR618B&storeId=W345</code>
+        Live stock is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.
       </div>
     </section>
 
-    <section id="status" class="card status">
+    <section id="status" class="status">
       <div id="statusText">Loading…</div>
       <div class="progress"><span id="progressBar"></span></div>
     </section>
 
     <section id="summary" class="summary">
-      <div class="card metric">
-        <div class="label">Product</div>
+      <div class="metric">
+        <div class="metric-label">Product</div>
         <div id="productName" class="product-title">—</div>
       </div>
 
-      <div class="card metric">
-        <div class="label">Stores checked</div>
-        <div id="storesChecked" class="num">0</div>
+      <div class="metric">
+        <div class="metric-label">Stores checked</div>
+        <div id="storesChecked" class="metric-value">0</div>
       </div>
 
-      <div class="card metric">
-        <div class="label">Stores with stock</div>
-        <div id="storesWithStock" class="num">0</div>
+      <div class="metric">
+        <div class="metric-label">Stores with stock</div>
+        <div id="storesWithStock" class="metric-value">0</div>
       </div>
 
-      <div class="card metric">
-        <div class="label">Visible stock</div>
-        <div id="totalStock" class="num">0</div>
+      <div class="metric">
+        <div class="metric-label">Visible stock</div>
+        <div id="totalStock" class="metric-value">0</div>
       </div>
 
-      <div class="card metric">
-        <div class="label">Lookup errors</div>
-        <div id="lookupErrors" class="num">0</div>
-      </div>
-
-      <div class="card metric">
-        <div class="label">Filter mode</div>
-        <div id="filterMode" class="small-value">—</div>
+      <div class="metric">
+        <div class="metric-label">Lookup errors</div>
+        <div id="lookupErrors" class="metric-value">0</div>
       </div>
     </section>
 
@@ -393,13 +590,13 @@
       <input id="filterInput" placeholder="Filter store, suburb, postcode..." />
 
       <select id="sortInput">
-        <option value="distance-asc">Nearby / postcode priority</option>
         <option value="stock-desc">Stock high to low</option>
+        <option value="distance-asc">Nearby / postcode priority</option>
         <option value="name-asc">Store A to Z</option>
       </select>
 
       <label class="checkbox-line">
-        <input id="inStockOnly" type="checkbox" />
+        <input id="inStockOnly" type="checkbox" checked />
         In-stock only
       </label>
 
@@ -409,7 +606,7 @@
     <section id="results" class="results"></section>
 
     <section class="footer">
-      Not affiliated with Officeworks. Inventory is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.
+      <strong>Designed by Lee.</strong> This tool is not affiliated with Officeworks.
     </section>
   </main>
 
@@ -441,8 +638,6 @@
 
     let lastData = null;
     let lastRows = [];
-
-    $("apiBaseText").textContent = API_BASE || "same-origin /api";
 
     function escapeHtml(value) {
       return String(value ?? "")
@@ -505,7 +700,9 @@
 
       const response = await fetch(target, {
         method: "GET",
-        headers: { "Accept": "application/json" }
+        headers: {
+          "Accept": "application/json"
+        }
       });
 
       const text = await response.text();
@@ -530,9 +727,13 @@
 
     function stockClass(row) {
       if (!row || row.status === "error") return "stock-error";
-      if (row.status === "in_stock" && Number(row.qty || 0) >= 5) return "stock-ok";
+
+      const qty = Number(row.qty || 0);
+
+      if (row.status === "in_stock" && qty >= 5) return "stock-ok";
       if (row.status === "in_stock") return "stock-low";
       if (row.status === "no_stock") return "stock-none";
+
       return "stock-unknown";
     }
 
@@ -540,11 +741,12 @@
       if (!row) return "Unknown";
       if (row.status === "error") return "Lookup error";
 
-      if (row.status === "in_stock" && Number(row.qty || 0) > 0) {
-        return `${row.qty} in stock`;
+      const qty = Number(row.qty || 0);
+
+      if (row.status === "in_stock" && qty > 0) {
+        return `${qty} in stock`;
       }
 
-      if (row.status === "invalid_part_number") return "Invalid code";
       if (row.status === "no_stock") return "No stock";
 
       return "Unknown";
@@ -582,14 +784,13 @@
         let hasMore = true;
         let totalStores = null;
         let product = null;
-        let filterMode = "—";
         let batch = 0;
 
         while (hasMore) {
           batch += 1;
 
           setStatus(
-            `Checking batch ${batch} for ${sku}…`,
+            `Checking ${sku} — batch ${batch}…`,
             false,
             totalStores ? Math.round((offset / totalStores) * 100) : 5
           );
@@ -607,7 +808,6 @@
           const data = await apiGet(`/api/check?${query.toString()}`);
 
           if (!product) product = data.product;
-          filterMode = data.filterMode || "—";
 
           const rows = Array.isArray(data.rows) ? data.rows : [];
           lastRows.push(...rows);
@@ -629,11 +829,10 @@
             state,
             postcode,
             radiusKm,
-            filterMode,
             rows: lastRows
           };
 
-          updateSummary(product, lastRows, filterMode);
+          updateSummary(product, lastRows);
           summaryBox.classList.add("show");
           toolbar.classList.add("show");
           renderRows();
@@ -644,12 +843,12 @@
               : 50;
 
           setStatus(
-            `Checked ${Math.min(offset, totalStores)}/${totalStores} stores. Mode: ${filterMode}.`,
+            `Checked ${Math.min(offset, totalStores)}/${totalStores} stores.`,
             false,
             progress
           );
 
-          await sleep(120);
+          await sleep(90);
         }
 
         hideStatus();
@@ -661,7 +860,7 @@
       }
     }
 
-    function updateSummary(product, rows, filterMode) {
+    function updateSummary(product, rows) {
       $("productName").textContent =
         product && product.name ? product.name : extractSku(productInput.value);
 
@@ -679,8 +878,6 @@
       $("lookupErrors").textContent = rows.filter(
         (row) => row.status === "error"
       ).length;
-
-      $("filterMode").textContent = filterMode || "—";
     }
 
     function renderRows() {
@@ -703,10 +900,10 @@
             row.state,
             row.postcode,
             row.phone,
-            row.storeId,
-            row.visibleSku,
-            row.stockPartNumber
-          ].join(" ").toLowerCase();
+            row.storeId
+          ]
+            .join(" ")
+            .toLowerCase();
 
           return haystack.includes(q);
         });
@@ -714,9 +911,7 @@
 
       rows.sort((a, b) => {
         if (sort === "distance-asc") {
-          const ad = sortDistance(a);
-          const bd = sortDistance(b);
-          return ad - bd;
+          return sortDistance(a) - sortDistance(b);
         }
 
         if (sort === "stock-desc") {
@@ -728,10 +923,14 @@
 
       if (!rows.length) {
         resultsBox.innerHTML = `
-          <article class="card store">
-            <div>
-              <h3>No matching stores</h3>
-              <div class="meta">Try increasing radius, changing postcode, clearing filter, or disabling in-stock only.</div>
+          <article class="store">
+            <div class="store-main">
+              <div class="store-title-row">
+                <h3>No matching stores</h3>
+              </div>
+              <div class="store-meta">
+                Try increasing radius, changing postcode, clearing the filter, or disabling in-stock only.
+              </div>
             </div>
           </article>
         `;
@@ -740,61 +939,55 @@
 
       resultsBox.innerHTML = rows
         .map((row) => {
+          const addressLine = [row.address, row.suburb, row.state, row.postcode]
+            .filter(Boolean)
+            .join(", ");
+
+          const phoneLine = row.phone
+            ? `<div><strong>Phone</strong> ${escapeHtml(row.phone)}</div>`
+            : "";
+
           const distance =
             typeof row.distanceKm === "number"
-              ? `<br />Distance: ${escapeHtml(row.distanceKm)} km`
+              ? `<span class="distance-pill">${escapeHtml(row.distanceKm)} km</span>`
               : "";
 
-          const postcodeScore =
-            typeof row.postcodeScore === "number"
-              ? `<br />Postcode score: ${escapeHtml(row.postcodeScore)}`
-              : "";
-
-          const partNumber = row.stockPartNumber
-            ? `<br />Stock partNumber: ${escapeHtml(row.stockPartNumber)}`
-            : "";
-
-          const source = row.source
-            ? `<br />Stock source: ${escapeHtml(row.source)}`
-            : "";
-
-          const signal = row.rawSignal
-            ? `<br />Signal: ${escapeHtml(row.rawSignal)}`
-            : "";
-
-          const error = row.error
-            ? `<br />Error: ${escapeHtml(row.error)}`
-            : "";
-
-          const optionSummary =
-            Array.isArray(row.options) && row.options.length
-              ? `<br />Options: ${escapeHtml(row.options.map((o) => `${o.type}:${o.qty}`).join(" | "))}`
-              : "";
+          const inStore = normalNumber(row.inStoreQuantity);
+          const clickCollect = normalNumber(row.clickAndCollectQuantity);
+          const delivery = normalNumber(row.deliveryQuantity);
 
           return `
-            <article class="card store">
-              <div>
-                <h3>${escapeHtml(row.storeName || "Unknown store")}</h3>
-                <div class="meta">
-                  ${escapeHtml(row.address || "")}
-                  ${row.address ? "<br />" : ""}
-                  ${escapeHtml([row.suburb, row.state, row.postcode].filter(Boolean).join(" "))}
-                  ${row.phone ? `<br />Phone: ${escapeHtml(row.phone)}` : ""}
-                  ${row.storeId ? `<br />Store ID: ${escapeHtml(row.storeId)}` : ""}
+            <article class="store">
+              <div class="store-main">
+                <div class="store-title-row">
+                  <h3>${escapeHtml(row.storeName || "Unknown store")}</h3>
                   ${distance}
-                  ${postcodeScore}
-                  ${partNumber}
-                  ${source}
-                  ${signal}
-                  ${optionSummary}
-                  ${error}
+                </div>
+
+                <div class="store-meta">
+                  <div><strong>Address</strong> ${escapeHtml(addressLine || "—")}</div>
+                  ${phoneLine}
                 </div>
               </div>
-              <div class="pill ${stockClass(row)}">${escapeHtml(stockText(row))}</div>
+
+              <div class="stock-block">
+                <div class="stock-badge ${stockClass(row)}">${escapeHtml(stockText(row))}</div>
+
+                <div class="stock-mini">
+                  <span class="mini-pill">Store ${escapeHtml(inStore)}</span>
+                  <span class="mini-pill">C&C ${escapeHtml(clickCollect)}</span>
+                  <span class="mini-pill">Delivery ${escapeHtml(delivery)}</span>
+                </div>
+              </div>
             </article>
           `;
         })
         .join("");
+    }
+
+    function normalNumber(value) {
+      const n = Number(value || 0);
+      return Number.isFinite(n) ? n : 0;
     }
 
     function sortDistance(row) {
@@ -810,17 +1003,91 @@
       return Number.isFinite(qty) ? qty : 0;
     }
 
+    function exportCsv() {
+      if (!lastRows.length) return;
+
+      const sku =
+        lastData && lastData.product
+          ? lastData.product.sku
+          : extractSku(productInput.value);
+
+      const productName =
+        lastData && lastData.product ? lastData.product.name : "";
+
+      const headers = [
+        "SKU",
+        "Product",
+        "Store ID",
+        "Store Name",
+        "Address",
+        "Suburb",
+        "State",
+        "Postcode",
+        "Phone",
+        "Qty",
+        "In Store",
+        "Click And Collect",
+        "Delivery",
+        "Status"
+      ];
+
+      const lines = [
+        headers.join(","),
+        ...lastRows.map((row) =>
+          [
+            sku,
+            productName,
+            row.storeId,
+            row.storeName,
+            row.address,
+            row.suburb,
+            row.state,
+            row.postcode,
+            row.phone,
+            row.qty,
+            row.inStoreQuantity,
+            row.clickAndCollectQuantity,
+            row.deliveryQuantity,
+            row.status
+          ]
+            .map(csvCell)
+            .join(",")
+        )
+      ];
+
+      const blob = new Blob([lines.join("\n")], {
+        type: "text/csv;charset=utf-8"
+      });
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `officeworks-stock-${sku}.csv`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(link.href);
+    }
+
+    function csvCell(value) {
+      return `"${String(value ?? "").replaceAll('"', '""')}"`;
+    }
+
     function sleep(ms) {
       return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     searchBtn.addEventListener("click", runSearch);
+
     productInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") runSearch();
     });
+
     filterInput.addEventListener("input", renderRows);
     sortInput.addEventListener("change", renderRows);
     inStockOnly.addEventListener("change", renderRows);
+    csvBtn.addEventListener("click", exportCsv);
 
     const params = new URLSearchParams(window.location.search);
 

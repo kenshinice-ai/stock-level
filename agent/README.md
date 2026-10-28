@@ -19,9 +19,9 @@ cd stock-level && cp agent/.env.example agent/.env
 
 ## 2. 建 Telegram 机器人（3 分钟）
 
-1. Telegram 里找 **@BotFather** → 发 `/newbot` → 按提示起名 → 拿到 token，填到 `agent/.env` 的 `TELEGRAM_BOT_TOKEN=`。
+1. Telegram 里找 **@BotFather** → 发 `/newbot` → 按提示起名 → 拿到 token（形如 `123456789:AAH...`）。用 `nano agent/.env` 打开，粘贴到 `TELEGRAM_BOT_TOKEN=` 后面（不要空格），按 `Ctrl+O` 回车保存，`Ctrl+X` 退出。
 2. 打开你新建的机器人，随便发一条消息（比如 `/start`）。
-3. 运行下面命令，把输出的 `TELEGRAM_CHAT_ID=...` 填到 `agent/.env`：
+3. 运行下面命令。只有一个对话时会自动把 `TELEGRAM_CHAT_ID` 写进 `agent/.env`：
 
 ```bash
 node --env-file=agent/.env agent/apple-agent.mjs --telegram-setup

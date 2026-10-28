@@ -11,6 +11,7 @@
 // See agent/README.md for configuration.
 
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import {
   APPLE_BASE,
   FAMILIES,
@@ -194,8 +195,16 @@ function beep(message) {
 }
 
 async function telegramSetup() {
+  const envFile = envFilePath();
   if (!config.telegramToken) {
-    console.log("Set TELEGRAM_BOT_TOKEN first (create a bot with @BotFather).");
+    console.log(
+      `TELEGRAM_BOT_TOKEN is empty in ${envFile || "your env file"}.\n` +
+        "Open it (e.g. `nano agent/.env`), paste the token from @BotFather right after TELEGRAM_BOT_TOKEN=, save, and run this again."
+    );
+    return;
+  }
+  if (!/^\d+:[\w-]{30,}$/.test(config.telegramToken)) {
+    console.log("TELEGRAM_BOT_TOKEN does not look like a bot token (expected 123456789:AA...). Copy it again from @BotFather.");
     return;
   }
   const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/getUpdates`);
@@ -215,6 +224,27 @@ async function telegramSetup() {
     return;
   }
   for (const [id, name] of chats) console.log(`TELEGRAM_CHAT_ID=${id}    # ${name}`);
+
+  if (chats.size === 1 && envFile) {
+    const [id] = chats.keys();
+    writeEnvValue(envFile, "TELEGRAM_CHAT_ID", String(id));
+    console.log(`Saved TELEGRAM_CHAT_ID to ${envFile}. Next: run with --test-alert.`);
+  } else if (envFile) {
+    console.log(`Copy the right TELEGRAM_CHAT_ID into ${envFile}.`);
+  }
+}
+
+// The file passed with node --env-file=..., if any.
+function envFilePath() {
+  const arg = process.execArgv.find((a) => a.startsWith("--env-file="));
+  return arg ? arg.slice("--env-file=".length) : "";
+}
+
+function writeEnvValue(file, key, value) {
+  const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  const line = `${key}=${value}`;
+  const pattern = new RegExp(`^${key}=.*$`, "m");
+  fs.writeFileSync(file, pattern.test(text) ? text.replace(pattern, line) : `${text.replace(/\n?$/, "\n")}${line}\n`);
 }
 
 async function testAlert() {

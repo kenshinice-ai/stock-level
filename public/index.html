@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Check Officeworks stock by store - Designed by Lee</title>
-  <meta name="description" content="Check Officeworks product stock by store. Designed by Lee." />
+  <meta name="description" content="Search Officeworks products and check stock at stores near you. Designed by Lee." />
 
   <style>
     :root {
@@ -155,11 +155,17 @@
       backdrop-filter: blur(18px);
     }
 
-    .search-grid {
+    .search-main {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) 135px 130px 130px 150px;
+      grid-template-columns: minmax(0, 1fr) 170px;
       gap: 12px;
-      align-items: center;
+    }
+
+    .search-loc {
+      display: grid;
+      grid-template-columns: 140px 170px 130px 150px;
+      gap: 12px;
+      margin-top: 12px;
     }
 
     input,
@@ -479,6 +485,160 @@
       white-space: nowrap;
     }
 
+    .ghost-btn {
+      background: var(--surface-solid);
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: none;
+      font-weight: 800;
+    }
+
+    .ghost-btn:hover {
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+    }
+
+    .ghost-btn.active {
+      border-color: rgba(21, 94, 239, 0.55);
+      color: var(--blue-dark);
+      background: rgba(21, 94, 239, 0.06);
+    }
+
+    .recent {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .recent:empty {
+      display: none;
+    }
+
+    .chip {
+      width: auto;
+      min-height: 32px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-solid);
+      color: #334155;
+      box-shadow: none;
+      font-size: 13px;
+      font-weight: 750;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .picker {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .picker:empty {
+      display: none;
+    }
+
+    .pick {
+      display: grid;
+      grid-template-columns: 56px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 72px;
+      padding: 10px 14px;
+      text-align: left;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+      font-weight: 700;
+    }
+
+    .pick img,
+    .product-img {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .pick small {
+      display: block;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .pick-price {
+      font-weight: 900;
+    }
+
+    .product-head {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .product-head .product-img {
+      width: 72px;
+      height: 72px;
+      flex-shrink: 0;
+    }
+
+    .product-head .product-img[hidden] {
+      display: none;
+    }
+
+    .product-sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .product-sub a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    .store-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .store-actions a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-solid);
+      color: #334155;
+      font-size: 13px;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .collect-note {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .quick-pill {
+      background: rgba(21, 94, 239, 0.1);
+      color: var(--blue-dark);
+    }
+
     .footer {
       margin-top: 24px;
       color: var(--muted);
@@ -495,16 +655,8 @@
         width: min(100% - 38px, 980px);
       }
 
-      .search-grid {
-        grid-template-columns: 1fr 1fr 1fr;
-      }
-
-      .search-grid input:first-child {
-        grid-column: span 3;
-      }
-
-      .search-grid button {
-        grid-column: span 3;
+      .search-loc {
+        grid-template-columns: repeat(4, 1fr);
       }
 
       .toolbar {
@@ -563,9 +715,29 @@
         border-radius: 24px;
       }
 
-      .search-grid,
-      .toolbar,
-      .summary {
+      .search-main {
+        grid-template-columns: 1fr;
+      }
+
+      .summary,
+      .toolbar {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .toolbar #filterInput {
+        grid-column: 1 / -1;
+      }
+
+      .metric {
+        min-height: 0;
+      }
+
+      .search-loc {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .picker {
         grid-template-columns: 1fr;
       }
 
@@ -607,8 +779,12 @@
         justify-content: flex-start;
       }
 
+      .collect-note {
+        text-align: left;
+      }
+
       .metric-value {
-        font-size: 30px;
+        font-size: 26px;
       }
     }
   </style>
@@ -620,7 +796,7 @@
       <div class="brand-pill" data-i18n="brand">📦 Officeworks Stock Level Checker</div>
 
       <div class="top-actions">
-        <a class="designer" href="/apple">🍎 iPhone 库存 →</a>
+        <a class="designer" href="/apple">🍎 iPhone →</a>
         <button id="langBtn" class="lang-btn" type="button">中文</button>
         <div class="designer" data-i18n="designer">Designed by Lee</div>
       </div>
@@ -632,39 +808,43 @@
         <span data-i18n="heroLine2">stock by store.</span>
       </h1>
       <p class="sub" data-i18n="subtitle">
-        Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.
+        Search a product by name, paste an Officeworks link or SKU, and see which stores near you have it.
       </p>
     </section>
 
     <section class="panel">
-      <div class="search-grid">
-        <input id="productInput" placeholder="Officeworks URL or SKU, e.g. JBAALR618B" autocomplete="off" />
+      <div class="search-main">
+        <input id="productInput" placeholder="Product name, Officeworks URL or SKU" autocomplete="off" enterkeyhint="search" />
+        <button id="searchBtn" type="button" data-i18n="searchButton">Check stock</button>
+      </div>
 
-        <select id="stateInput">
-          <option value="all">All States</option>
+      <div class="search-loc">
+        <input id="postcodeInput" placeholder="Postcode" inputmode="numeric" maxlength="4" value="3000" />
+        <button id="locateBtn" class="ghost-btn" type="button" data-i18n="useLocation">📍 My location</button>
+
+        <select id="radiusInput" aria-label="Radius">
+          <option value="5">5 km</option>
+          <option value="10">10 km</option>
+          <option value="25" selected>25 km</option>
+          <option value="50">50 km</option>
+          <option value="100">100 km</option>
+          <option value="250">250 km</option>
+        </select>
+
+        <select id="stateInput" aria-label="State">
+          <option value="all" data-i18n="anyState">Any state</option>
           <option value="ACT">ACT</option>
           <option value="NSW">NSW</option>
           <option value="NT">NT</option>
           <option value="QLD">QLD</option>
           <option value="SA">SA</option>
           <option value="TAS">TAS</option>
-          <option value="VIC" selected>VIC</option>
+          <option value="VIC">VIC</option>
           <option value="WA">WA</option>
         </select>
-
-        <input id="postcodeInput" placeholder="Postcode" value="3000" />
-
-        <select id="radiusInput">
-          <option value="5">5 km</option>
-          <option value="10">10 km</option>
-          <option value="25">25 km</option>
-          <option value="50">50 km</option>
-          <option value="100">100 km</option>
-          <option value="200" selected>200 km</option>
-        </select>
-
-        <button id="searchBtn" data-i18n="searchButton">Check stock</button>
       </div>
+
+      <div id="recent" class="recent"></div>
 
       <div class="hint" data-i18n="hint">
         Live stock is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.
@@ -676,11 +856,17 @@
       <div class="progress"><span id="progressBar"></span></div>
     </section>
 
+    <section id="picker" class="picker"></section>
+
     <section id="summary" class="summary">
       <div class="metric product-metric">
-        <div>
-          <div class="metric-label" data-i18n="product">Product</div>
-          <div id="productName" class="product-title">—</div>
+        <div class="product-head">
+          <img id="productImage" class="product-img" alt="" hidden />
+          <div>
+            <div class="metric-label" data-i18n="product">Product</div>
+            <div id="productName" class="product-title">—</div>
+            <div id="productSub" class="product-sub"></div>
+          </div>
         </div>
         <div class="product-price-block">
           <div class="metric-label" data-i18n="price">Price</div>
@@ -699,8 +885,8 @@
       </div>
 
       <div class="metric">
-        <div class="metric-label" data-i18n="visibleStock">Visible stock</div>
-        <div id="totalStock" class="metric-value">0</div>
+        <div class="metric-label" data-i18n="nearestWithStock">Nearest with stock</div>
+        <div id="nearestStock" class="metric-value">—</div>
       </div>
 
       <div class="metric">
@@ -713,8 +899,8 @@
       <input id="filterInput" placeholder="Filter store, suburb, postcode..." />
 
       <select id="sortInput">
+        <option value="distance-asc" data-i18n="sortNearby">Nearest first</option>
         <option value="stock-desc" data-i18n="sortStock">Stock high to low</option>
-        <option value="distance-asc" data-i18n="sortNearby">Nearby / postcode priority</option>
         <option value="name-asc" data-i18n="sortName">Store A to Z</option>
       </select>
 
@@ -723,7 +909,7 @@
         <span data-i18n="inStockOnly">In-stock only</span>
       </label>
 
-      <button id="csvBtn" data-i18n="exportCsv">Export CSV</button>
+      <button id="refreshBtn" class="ghost-btn" type="button" data-i18n="refresh">↻ Refresh</button>
     </section>
 
     <section id="results" class="results"></section>
@@ -731,14 +917,18 @@
     <section class="footer">
       <strong data-i18n="footerDesign">Designed by Lee.</strong>
       <span data-i18n="footerNote">This tool is not affiliated with Officeworks.</span>
+      <button id="csvBtn" class="chip" type="button" data-i18n="exportCsv" hidden>Export CSV</button>
+      <div>Postcode locations © <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0).</div>
     </section>
   </main>
 
   <script>
     const WORKER_ORIGIN = "https://stock-level.lee-liu-melbourne.workers.dev";
     const BATCH_LIMIT = 20;
+    const RECENT_KEY = "owStockRecent";
+    const RECENT_MAX = 6;
 
-    const API_BASE = location.hostname.endsWith("workers.dev")
+    const API_BASE = location.hostname.endsWith("workers.dev") || location.hostname === "localhost"
       ? ""
       : WORKER_ORIGIN;
 
@@ -749,20 +939,27 @@
     const postcodeInput = $("postcodeInput");
     const radiusInput = $("radiusInput");
     const searchBtn = $("searchBtn");
+    const locateBtn = $("locateBtn");
     const statusBox = $("status");
     const statusText = $("statusText");
     const progressBar = $("progressBar");
+    const pickerBox = $("picker");
     const summaryBox = $("summary");
     const toolbar = $("toolbar");
     const resultsBox = $("results");
     const filterInput = $("filterInput");
     const sortInput = $("sortInput");
     const inStockOnly = $("inStockOnly");
+    const refreshBtn = $("refreshBtn");
     const csvBtn = $("csvBtn");
 
     let lastData = null;
     let lastRows = [];
-    let currentLang = localStorage.getItem("owStockLang") || "en";
+    let lastSku = "";
+    let lastPicks = [];
+    let geo = null; // { lat, lng } from the browser, never put in the URL
+    let busy = false;
+    let currentLang = storageGet("owStockLang") || "en";
 
     const I18N = {
       en: {
@@ -770,80 +967,110 @@
         designer: "Designed by Lee",
         heroLine1: "Check Officeworks",
         heroLine2: "stock by store.",
-        subtitle: "Search by Officeworks product URL or SKU, then check nearby store availability by postcode, state and radius.",
+        subtitle: "Search a product by name, paste an Officeworks link or SKU, and see which stores near you have it.",
         hint: "Live stock is indicative only. Final confirmation should come from Officeworks checkout, Click & Collect or the store.",
         product: "Product",
         price: "Price",
         storesChecked: "Stores checked",
         storesWithStock: "Stores with stock",
-        visibleStock: "Visible stock",
+        nearestWithStock: "Nearest with stock",
         lookupErrors: "Lookup errors",
         sortStock: "Stock high to low",
-        sortNearby: "Nearby / postcode priority",
+        sortNearby: "Nearest first",
         sortName: "Store A to Z",
         inStockOnly: "In-stock only",
         exportCsv: "Export CSV",
+        refresh: "↻ Refresh",
         footerDesign: "Designed by Lee.",
         footerNote: "This tool is not affiliated with Officeworks.",
         langButton: "中文",
         searchButton: "Check stock",
+        useLocation: "📍 My location",
+        usingLocation: "📍 Using location",
+        anyState: "Any state",
         filterPlaceholder: "Filter store, suburb, postcode...",
-        inputPlaceholder: "Officeworks URL or SKU, e.g. JBAALR618B",
+        inputPlaceholder: "Product name, Officeworks URL or SKU",
         noMatchingStores: "No matching stores",
-        noMatchingHint: "Try increasing radius, changing postcode, clearing the filter, or disabling in-stock only.",
-        enterSku: "Please enter an Officeworks product URL or SKU.",
+        noMatchingHint: "Try a bigger radius, another postcode, clearing the filter, or turning off in-stock only.",
+        noStoresInRadius: "No Officeworks stores within this radius. Try a bigger radius.",
+        enterSku: "Type a product name, or paste an Officeworks link or SKU.",
+        searchingProducts: "Searching Officeworks products… this can take 10–15 seconds.",
+        pickProduct: "Pick a product to check stock:",
+        noProducts: "No products found. Try another name, or paste the product link.",
+        locating: "Getting your location…",
+        locationFailed: "Could not get your location. Enter a postcode instead.",
         checking: "Checking",
         checked: "Checked",
         stores: "stores",
+        within: "within",
         address: "Address",
         phone: "Phone",
-        store: "Store",
+        store: "In store",
         clickCollect: "C&C",
         delivery: "Delivery",
+        quickCollect: "Quick Collect",
         inStock: "in stock",
         noStock: "No stock",
         lookupError: "Lookup error",
-        unknown: "Unknown"
+        unknown: "Unknown",
+        directions: "Directions",
+        call: "Call",
+        viewOnOfficeworks: "View on Officeworks"
       },
       zh: {
         brand: "📦 Officeworks 库存查询",
         designer: "Designed by Lee",
         heroLine1: "查询 Officeworks",
         heroLine2: "各门店库存。",
-        subtitle: "输入 Officeworks 产品链接或 SKU，通过 postcode、州和范围快速查看附近门店库存。",
+        subtitle: "输入商品名称搜索，或粘贴 Officeworks 链接 / SKU，查看你附近哪些门店有货。",
         hint: "库存仅供参考，最终以 Officeworks 官网结账、Click & Collect 或门店确认为准。",
         product: "产品",
         price: "价格",
         storesChecked: "已查询门店",
         storesWithStock: "有货门店",
-        visibleStock: "可见库存",
+        nearestWithStock: "最近的有货门店",
         lookupErrors: "查询错误",
         sortStock: "库存从高到低",
-        sortNearby: "附近 / postcode 优先",
+        sortNearby: "距离最近优先",
         sortName: "门店 A-Z",
         inStockOnly: "只看有货",
         exportCsv: "导出 CSV",
+        refresh: "↻ 刷新",
         footerDesign: "Designed by Lee.",
         footerNote: "本工具与 Officeworks 无官方关联。",
         langButton: "EN",
         searchButton: "查询库存",
+        useLocation: "📍 我的位置",
+        usingLocation: "📍 已用定位",
+        anyState: "所有州",
         filterPlaceholder: "筛选门店、suburb、postcode...",
-        inputPlaceholder: "Officeworks 链接或 SKU，例如 JBAALR618B",
+        inputPlaceholder: "商品名称、Officeworks 链接或 SKU",
         noMatchingStores: "没有匹配门店",
         noMatchingHint: "可以扩大范围、更换 postcode、清空筛选，或关闭只看有货。",
-        enterSku: "请输入 Officeworks 产品链接或 SKU。",
+        noStoresInRadius: "这个范围内没有 Officeworks 门店，请扩大范围。",
+        enterSku: "请输入商品名称，或粘贴 Officeworks 链接 / SKU。",
+        searchingProducts: "正在搜索 Officeworks 商品…可能需要 10–15 秒。",
+        pickProduct: "选择要查询库存的商品：",
+        noProducts: "没有找到商品，换个名称试试，或直接粘贴商品链接。",
+        locating: "正在获取你的位置…",
+        locationFailed: "无法获取位置，请改为输入 postcode。",
         checking: "正在查询",
         checked: "已查询",
         stores: "家门店",
+        within: "范围",
         address: "地址",
         phone: "电话",
-        store: "现货",
-        clickCollect: "C&C 到店自提",
-        delivery: "Delivery 物流",
+        store: "店内",
+        clickCollect: "C&C 自提",
+        delivery: "配送",
+        quickCollect: "Quick Collect 快取",
         inStock: "有货",
         noStock: "无货",
         lookupError: "查询错误",
-        unknown: "未知"
+        unknown: "未知",
+        directions: "导航",
+        call: "打电话",
+        viewOnOfficeworks: "在 Officeworks 查看"
       }
     };
 
@@ -851,25 +1078,33 @@
       return I18N[currentLang][key] || I18N.en[key] || key;
     }
 
+    function storageGet(key) {
+      try { return localStorage.getItem(key); } catch { return null; }
+    }
+
+    function storageSet(key, value) {
+      try { localStorage.setItem(key, value); } catch {}
+    }
+
     function applyLang() {
       document.documentElement.lang = currentLang === "zh" ? "zh-Hans" : "en-AU";
 
       document.querySelectorAll("[data-i18n]").forEach((el) => {
-        const key = el.getAttribute("data-i18n");
-        el.textContent = t(key);
+        el.textContent = t(el.getAttribute("data-i18n"));
       });
 
       $("langBtn").textContent = t("langButton");
-      searchBtn.textContent = t("searchButton");
       productInput.placeholder = t("inputPlaceholder");
       filterInput.placeholder = t("filterPlaceholder");
+      locateBtn.textContent = geo ? t("usingLocation") : t("useLocation");
 
+      renderRecent();
       renderRows();
     }
 
     $("langBtn").addEventListener("click", () => {
       currentLang = currentLang === "en" ? "zh" : "en";
-      localStorage.setItem("owStockLang", currentLang);
+      storageSet("owStockLang", currentLang);
       applyLang();
     });
 
@@ -899,6 +1134,7 @@
       progressBar.style.width = "0%";
     }
 
+    // A pasted Officeworks URL, or a SKU-like token (letters + digits, no spaces).
     function extractSku(input) {
       const raw = String(input || "").trim();
 
@@ -924,9 +1160,14 @@
             }
           }
         }
+        return "";
       } catch (_) {}
 
-      return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      // Typed SKUs: letters + digits (JBAALR618B), or all caps (COALKVBE).
+      if (!/^[A-Za-z0-9]{4,30}$/.test(raw)) return "";
+      if (/\d/.test(raw) && /[A-Za-z]/.test(raw)) return raw.toUpperCase();
+      if (raw.length >= 6 && raw === raw.toUpperCase()) return raw;
+      return "";
     }
 
     async function apiGet(path) {
@@ -977,73 +1218,148 @@
 
       const qty = Number(row.qty || 0);
 
-      if (row.status === "in_stock" && qty > 0) {
-        return currentLang === "zh"
-          ? `${qty} ${t("inStock")}`
-          : `${qty} ${t("inStock")}`;
-      }
-
+      if (row.status === "in_stock" && qty > 0) return `${qty} ${t("inStock")}`;
       if (row.status === "no_stock") return t("noStock");
 
       return t("unknown");
     }
 
-    async function runSearch() {
-      const sku = extractSku(productInput.value);
-      const state = stateInput.value;
-      const postcode = String(postcodeInput.value || "").trim();
-      const radiusKm = radiusInput.value;
+    // ------------------------------------------------------------ search
 
-      if (!sku) {
+    async function submit() {
+      const value = productInput.value.trim();
+
+      if (!value) {
         setStatus(t("enterSku"), true, 0);
         return;
       }
 
+      const sku = extractSku(value);
+      if (sku) return runCheck(sku);
+      return searchProducts(value);
+    }
+
+    async function searchProducts(query) {
+      if (busy) return;
+      busy = true;
       searchBtn.disabled = true;
-      lastData = null;
+      pickerBox.innerHTML = "";
+      setStatus(t("searchingProducts"), false, 30);
+
+      try {
+        const data = await apiGet(`/api/search?q=${encodeURIComponent(query)}&limit=8`);
+        const products = Array.isArray(data.products) ? data.products : [];
+
+        if (!products.length) {
+          setStatus(t("noProducts"), true, 0);
+          return;
+        }
+
+        setStatus(t("pickProduct"), false, 100);
+        lastPicks = products;
+        pickerBox.innerHTML = products
+          .map(
+            (p) => `
+              <button class="pick" type="button" data-sku="${escapeHtml(p.sku)}" data-name="${escapeHtml(p.name)}">
+                ${p.image ? `<img src="${escapeHtml(p.image)}" alt="" loading="lazy" />` : "<span></span>"}
+                <span>${escapeHtml(p.name)}<small>${escapeHtml(p.sku)}${p.brand ? ` · ${escapeHtml(p.brand)}` : ""}</small></span>
+                <span class="pick-price">${escapeHtml(p.price || "")}</span>
+              </button>`
+          )
+          .join("");
+      } catch (err) {
+        setStatus(err.message || "Search failed", true, 0);
+      } finally {
+        busy = false;
+        searchBtn.disabled = false;
+      }
+    }
+
+    pickerBox.addEventListener("click", (event) => {
+      const pick = event.target.closest(".pick");
+      if (!pick) return;
+      productInput.value = pick.dataset.sku;
+      pickerBox.innerHTML = "";
+      runCheck(pick.dataset.sku, lastPicks.find((p) => p.sku === pick.dataset.sku) || pick.dataset.name);
+    });
+
+    // ------------------------------------------------------------ stock check
+
+    function locationQuery() {
+      const query = new URLSearchParams({
+        state: stateInput.value,
+        radiusKm: radiusInput.value
+      });
+      const postcode = String(postcodeInput.value || "").trim();
+
+      if (geo) {
+        query.set("lat", geo.lat.toFixed(4));
+        query.set("lng", geo.lng.toFixed(4));
+      }
+      if (postcode) query.set("postcode", postcode);
+      return query;
+    }
+
+    // known: a product from the picker, or just a name (recent searches).
+    async function runCheck(sku, known = "") {
+      if (busy) return;
+      busy = true;
+      searchBtn.disabled = true;
+      refreshBtn.disabled = true;
+      pickerBox.innerHTML = "";
+
+      lastSku = sku;
+      const knownProduct = known && typeof known === "object" ? known : { name: known || sku };
+      lastData = { product: { sku, price: "", ...knownProduct }, rows: [] };
+      if (known && typeof known === "object") addRecent(sku, known.name);
       lastRows = [];
       resultsBox.innerHTML = "";
-      summaryBox.classList.remove("show");
-      toolbar.classList.remove("show");
+      renderProduct(lastData.product);
+      updateSummary(lastRows);
+      summaryBox.classList.add("show");
+      toolbar.classList.add("show");
+      csvBtn.hidden = true;
 
       const pageUrl = new URL(window.location.href);
+      pageUrl.search = "";
       pageUrl.searchParams.set("sku", sku);
-      pageUrl.searchParams.set("state", state);
-
-      if (postcode) pageUrl.searchParams.set("postcode", postcode);
-      if (radiusKm) pageUrl.searchParams.set("radiusKm", radiusKm);
-
+      pageUrl.searchParams.set("state", stateInput.value);
+      pageUrl.searchParams.set("radiusKm", radiusInput.value);
+      if (postcodeInput.value.trim()) pageUrl.searchParams.set("postcode", postcodeInput.value.trim());
       history.replaceState(null, "", pageUrl.toString());
+
+      storagePostcode();
+
+      // The product lookup is slow upstream, so it runs alongside the stock check.
+      apiGet(`/api/product?sku=${encodeURIComponent(sku)}`)
+        .then((data) => {
+          if (lastSku !== sku || !data.product || !data.product.rawFound) return;
+          lastData.product = data.product;
+          renderProduct(data.product);
+          addRecent(sku, data.product.name);
+        })
+        .catch(() => {});
 
       try {
         let offset = 0;
         let hasMore = true;
         let totalStores = null;
-        let product = null;
-        let batch = 0;
 
         while (hasMore) {
-          batch += 1;
-
           setStatus(
-            `${t("checking")} ${sku} — batch ${batch}…`,
+            `${t("checking")} ${sku}…`,
             false,
             totalStores ? Math.round((offset / totalStores) * 100) : 5
           );
 
-          const query = new URLSearchParams({
-            sku,
-            state,
-            offset: String(offset),
-            limit: String(BATCH_LIMIT)
-          });
-
-          if (postcode) query.set("postcode", postcode);
-          if (radiusKm) query.set("radiusKm", radiusKm);
+          const query = locationQuery();
+          query.set("sku", sku);
+          query.set("product", "0");
+          query.set("offset", String(offset));
+          query.set("limit", String(BATCH_LIMIT));
 
           const data = await apiGet(`/api/check?${query.toString()}`);
-
-          if (!product) product = data.product;
+          if (lastSku !== sku) return;
 
           const rows = Array.isArray(data.rows) ? data.rows : [];
           lastRows.push(...rows);
@@ -1060,68 +1376,81 @@
 
           hasMore = Boolean(data.paging && data.paging.hasMore);
 
-          lastData = {
-            product,
-            state,
-            postcode,
-            radiusKm,
-            rows: lastRows
-          };
+          if (totalStores === 0) {
+            setStatus(t("noStoresInRadius"), true, 0);
+            break;
+          }
 
-          updateSummary(product, lastRows);
-          summaryBox.classList.add("show");
-          toolbar.classList.add("show");
+          lastData.rows = lastRows;
+          lastData.filterMode = data.filterMode;
+          updateSummary(lastRows);
           renderRows();
 
-          const progress =
-            totalStores > 0
-              ? Math.round((Math.min(offset, totalStores) / totalStores) * 100)
-              : 50;
-
           setStatus(
-            `${t("checked")} ${Math.min(offset, totalStores)}/${totalStores} ${t("stores")}.`,
+            `${t("checked")} ${Math.min(offset, totalStores)}/${totalStores} ${t("stores")}` +
+              (data.filterMode === "radius" ? ` (${t("within")} ${radiusInput.value} km)` : "") +
+              ".",
             false,
-            progress
+            totalStores > 0 ? Math.round((Math.min(offset, totalStores) / totalStores) * 100) : 50
           );
-
-          await sleep(90);
         }
 
-        hideStatus();
+        if (totalStores) {
+          hideStatus();
+          csvBtn.hidden = false;
+        }
         renderRows();
       } catch (err) {
         setStatus(err.message || "Something went wrong.", true, 0);
       } finally {
+        busy = false;
         searchBtn.disabled = false;
+        refreshBtn.disabled = false;
       }
     }
 
-    function updateSummary(product, rows) {
-      $("productName").textContent =
-        product && product.name ? product.name : extractSku(productInput.value);
+    function renderProduct(product) {
+      $("productName").textContent = product && product.name ? product.name : lastSku;
+
+      const img = $("productImage");
+      if (product && product.image) {
+        img.src = product.image;
+        img.hidden = false;
+      } else {
+        img.hidden = true;
+        img.removeAttribute("src");
+      }
+
+      const sub = [escapeHtml(product && product.sku ? product.sku : lastSku)];
+      if (product && product.brand) sub.push(escapeHtml(product.brand));
+      if (product && product.url) {
+        sub.push(`<a href="${escapeHtml(product.url)}" target="_blank" rel="noopener">${escapeHtml(t("viewOnOfficeworks"))} ↗</a>`);
+      }
+      $("productSub").innerHTML = sub.join(" · ");
 
       const priceText = product && product.price ? product.price : "—";
       const priceEl = $("productPrice");
       priceEl.textContent = priceText;
       priceEl.classList.toggle("empty", priceText === "—");
+    }
+
+    function updateSummary(rows) {
+      const withStock = rows.filter((row) => row.status === "in_stock");
 
       $("storesChecked").textContent = rows.length;
+      $("storesWithStock").textContent = withStock.length;
+      $("lookupErrors").textContent = rows.filter((row) => row.status === "error").length;
 
-      $("storesWithStock").textContent = rows.filter(
-        (row) => row.status === "in_stock"
-      ).length;
-
-      $("totalStock").textContent = rows.reduce((sum, row) => {
-        const qty = Number(row.qty || 0);
-        return Number.isFinite(qty) ? sum + qty : sum;
-      }, 0);
-
-      $("lookupErrors").textContent = rows.filter(
-        (row) => row.status === "error"
-      ).length;
+      const nearest = withStock
+        .filter((row) => typeof row.distanceKm === "number")
+        .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+      $("nearestStock").textContent = nearest ? `${nearest.distanceKm} km` : "—";
+      $("nearestStock").title = nearest ? nearest.storeName : "";
     }
 
     function renderRows() {
+      if (!lastSku) return;
+
       const q = filterInput.value.trim().toLowerCase();
       const sort = sortInput.value;
       const onlyStock = inStockOnly.checked;
@@ -1134,15 +1463,7 @@
 
       if (q) {
         rows = rows.filter((row) => {
-          const haystack = [
-            row.storeName,
-            row.address,
-            row.suburb,
-            row.state,
-            row.postcode,
-            row.phone,
-            row.storeId
-          ]
+          const haystack = [row.storeName, row.address, row.suburb, row.state, row.postcode, row.phone, row.storeId]
             .join(" ")
             .toLowerCase();
 
@@ -1151,79 +1472,82 @@
       }
 
       rows.sort((a, b) => {
-        if (sort === "distance-asc") {
-          return sortDistance(a) - sortDistance(b);
-        }
-
-        if (sort === "stock-desc") {
-          return stockSort(b) - stockSort(a);
-        }
-
+        if (sort === "distance-asc") return sortDistance(a) - sortDistance(b);
+        if (sort === "stock-desc") return stockSort(b) - stockSort(a) || sortDistance(a) - sortDistance(b);
         return String(a.storeName).localeCompare(String(b.storeName));
       });
 
       if (!rows.length) {
-        resultsBox.innerHTML = `
-          <article class="store">
-            <div class="store-main">
-              <div class="store-title-row">
-                <h3>${escapeHtml(t("noMatchingStores"))}</h3>
+        resultsBox.innerHTML = lastRows.length
+          ? `
+            <article class="store">
+              <div class="store-main">
+                <div class="store-title-row"><h3>${escapeHtml(t("noMatchingStores"))}</h3></div>
+                <div class="store-meta">${escapeHtml(t("noMatchingHint"))}</div>
               </div>
-              <div class="store-meta">
-                ${escapeHtml(t("noMatchingHint"))}
-              </div>
-            </div>
-          </article>
-        `;
+            </article>`
+          : "";
         return;
       }
 
-      resultsBox.innerHTML = rows
-        .map((row) => {
-          const addressLine = [row.address, row.suburb, row.state, row.postcode]
-            .filter(Boolean)
-            .join(", ");
+      resultsBox.innerHTML = rows.map(renderStore).join("");
+    }
 
-          const phoneLine = row.phone
-            ? `<div><strong>${escapeHtml(t("phone"))}</strong> ${escapeHtml(row.phone)}</div>`
-            : "";
+    function renderStore(row) {
+      const addressLine = [row.address, row.suburb, row.state, row.postcode].filter(Boolean).join(", ");
 
-          const distance =
-            typeof row.distanceKm === "number"
-              ? `<span class="distance-pill">${escapeHtml(row.distanceKm)} km</span>`
-              : "";
+      const distance =
+        typeof row.distanceKm === "number"
+          ? `<span class="distance-pill">${escapeHtml(row.distanceKm)} km</span>`
+          : "";
 
-          const inStore = normalNumber(row.inStoreQuantity);
-          const clickCollect = normalNumber(row.clickAndCollectQuantity);
-          const delivery = normalNumber(row.deliveryQuantity);
+      const destination =
+        typeof row.lat === "number" && typeof row.lng === "number"
+          ? `${row.lat},${row.lng}`
+          : `${row.storeName} ${addressLine}`;
+      const actions = [
+        `<a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}" target="_blank" rel="noopener">🧭 ${escapeHtml(t("directions"))}</a>`
+      ];
+      if (row.phone) {
+        actions.push(`<a href="tel:${escapeHtml(row.phone.replace(/[^0-9+]/g, ""))}">📞 ${escapeHtml(row.phone)}</a>`);
+      }
 
-          return `
-            <article class="store">
-              <div class="store-main">
-                <div class="store-title-row">
-                  <h3>${escapeHtml(row.storeName || "Unknown store")}</h3>
-                  ${distance}
-                </div>
+      const inStore = normalNumber(row.inStoreQuantity);
+      const clickCollect = normalNumber(row.clickAndCollectQuantity);
+      const delivery = normalNumber(row.deliveryQuantity);
+      const collect =
+        row.status === "in_stock" && row.collectEstimation
+          ? `<div class="collect-note">${escapeHtml(row.collectEstimation)}</div>`
+          : "";
 
-                <div class="store-meta">
-                  <div><strong>${escapeHtml(t("address"))}</strong> ${escapeHtml(addressLine || "—")}</div>
-                  ${phoneLine}
-                </div>
-              </div>
+      return `
+        <article class="store">
+          <div class="store-main">
+            <div class="store-title-row">
+              <h3>${escapeHtml(row.storeName || "Unknown store")}</h3>
+              ${distance}
+            </div>
 
-              <div class="stock-block">
-                <div class="stock-badge ${stockClass(row)}">${escapeHtml(stockText(row))}</div>
+            <div class="store-meta">
+              <div>${escapeHtml(addressLine || "—")}</div>
+            </div>
 
-                <div class="stock-mini">
-                  <span class="mini-pill">${escapeHtml(t("store"))} ${escapeHtml(inStore)}</span>
-                  <span class="mini-pill">${escapeHtml(t("clickCollect"))} ${escapeHtml(clickCollect)}</span>
-                  <span class="mini-pill">${escapeHtml(t("delivery"))} ${escapeHtml(delivery)}</span>
-                </div>
-              </div>
-            </article>
-          `;
-        })
-        .join("");
+            <div class="store-actions">${actions.join("")}</div>
+          </div>
+
+          <div class="stock-block">
+            <div class="stock-badge ${stockClass(row)}">${escapeHtml(stockText(row))}</div>
+
+            <div class="stock-mini">
+              <span class="mini-pill">${escapeHtml(t("store"))} ${escapeHtml(inStore)}</span>
+              <span class="mini-pill">${escapeHtml(t("clickCollect"))} ${escapeHtml(clickCollect)}</span>
+              <span class="mini-pill">${escapeHtml(t("delivery"))} ${escapeHtml(delivery)}</span>
+              ${row.quickCollect && row.status === "in_stock" ? `<span class="mini-pill quick-pill">⚡ ${escapeHtml(t("quickCollect"))}</span>` : ""}
+            </div>
+            ${collect}
+          </div>
+        </article>
+      `;
     }
 
     function normalNumber(value) {
@@ -1244,75 +1568,111 @@
       return Number.isFinite(qty) ? qty : 0;
     }
 
+    // ------------------------------------------------------------ location
+
+    locateBtn.addEventListener("click", () => {
+      if (geo) {
+        geo = null;
+        locateBtn.classList.remove("active");
+        locateBtn.textContent = t("useLocation");
+        return;
+      }
+      if (!navigator.geolocation) {
+        setStatus(t("locationFailed"), true, 0);
+        return;
+      }
+      setStatus(t("locating"), false, 20);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          geo = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          locateBtn.classList.add("active");
+          locateBtn.textContent = t("usingLocation");
+          postcodeInput.value = "";
+          hideStatus();
+          if (lastSku) runCheck(lastSku);
+        },
+        () => setStatus(t("locationFailed"), true, 0),
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+      );
+    });
+
+    postcodeInput.addEventListener("input", () => {
+      if (geo && postcodeInput.value.trim()) {
+        geo = null;
+        locateBtn.classList.remove("active");
+        locateBtn.textContent = t("useLocation");
+      }
+    });
+
+    function storagePostcode() {
+      const postcode = postcodeInput.value.trim();
+      if (/^\d{4}$/.test(postcode)) storageSet("owStockPostcode", postcode);
+    }
+
+    // ------------------------------------------------------------ recent
+
+    function readRecent() {
+      try {
+        const list = JSON.parse(storageGet(RECENT_KEY) || "[]");
+        return Array.isArray(list) ? list.filter((item) => item && item.sku) : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function addRecent(sku, name) {
+      const list = readRecent().filter((item) => item.sku !== sku);
+      list.unshift({ sku, name: name || sku });
+      storageSet(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX)));
+      renderRecent();
+    }
+
+    function renderRecent() {
+      $("recent").innerHTML = readRecent()
+        .map((item) => `<button class="chip" type="button" data-sku="${escapeHtml(item.sku)}" title="${escapeHtml(item.sku)}">${escapeHtml(item.name)}</button>`)
+        .join("");
+    }
+
+    $("recent").addEventListener("click", (event) => {
+      const chip = event.target.closest(".chip");
+      if (!chip) return;
+      productInput.value = chip.dataset.sku;
+      runCheck(chip.dataset.sku, chip.textContent);
+    });
+
+    // ------------------------------------------------------------ CSV
+
     function exportCsv() {
       if (!lastRows.length) return;
 
-      const sku =
-        lastData && lastData.product
-          ? lastData.product.sku
-          : extractSku(productInput.value);
-
-      const productName =
-        lastData && lastData.product ? lastData.product.name : "";
-
-      const productPrice =
-        lastData && lastData.product ? lastData.product.price : "";
+      const product = (lastData && lastData.product) || {};
+      const sku = product.sku || lastSku;
 
       const headers = [
-        "SKU",
-        "Product",
-        "Price",
-        "Store ID",
-        "Store Name",
-        "Address",
-        "Suburb",
-        "State",
-        "Postcode",
-        "Phone",
-        "Qty",
-        "In Store",
-        "Click And Collect",
-        "Delivery",
-        "Status"
+        "SKU", "Product", "Price", "Store ID", "Store Name", "Address", "Suburb", "State", "Postcode",
+        "Phone", "Distance km", "Qty", "In Store", "Click And Collect", "Delivery", "Status"
       ];
 
       const lines = [
         headers.join(","),
         ...lastRows.map((row) =>
           [
-            sku,
-            productName,
-            productPrice,
-            row.storeId,
-            row.storeName,
-            row.address,
-            row.suburb,
-            row.state,
-            row.postcode,
-            row.phone,
-            row.qty,
-            row.inStoreQuantity,
-            row.clickAndCollectQuantity,
-            row.deliveryQuantity,
-            row.status
+            sku, product.name || "", product.price || "", row.storeId, row.storeName, row.address, row.suburb,
+            row.state, row.postcode, row.phone, row.distanceKm, row.qty, row.inStoreQuantity,
+            row.clickAndCollectQuantity, row.deliveryQuantity, row.status
           ]
             .map(csvCell)
             .join(",")
         )
       ];
 
-      const blob = new Blob([lines.join("\n")], {
-        type: "text/csv;charset=utf-8"
-      });
-
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = `officeworks-stock-${sku}.csv`;
-
       document.body.appendChild(link);
       link.click();
       link.remove();
-
       URL.revokeObjectURL(link.href);
     }
 
@@ -1320,32 +1680,38 @@
       return `"${String(value ?? "").replaceAll('"', '""')}"`;
     }
 
-    function sleep(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
+    // ------------------------------------------------------------ wiring
 
-    searchBtn.addEventListener("click", runSearch);
+    searchBtn.addEventListener("click", submit);
 
     productInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") runSearch();
+      if (event.key === "Enter") submit();
+    });
+
+    postcodeInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") submit();
     });
 
     filterInput.addEventListener("input", renderRows);
     sortInput.addEventListener("change", renderRows);
     inStockOnly.addEventListener("change", renderRows);
+    refreshBtn.addEventListener("click", () => lastSku && runCheck(lastSku, lastData && lastData.product && lastData.product.name));
     csvBtn.addEventListener("click", exportCsv);
 
     const params = new URLSearchParams(window.location.search);
 
     const initialSku = params.get("sku");
     const initialState = params.get("state");
-    const initialPostcode = params.get("postcode");
+    const initialPostcode = params.get("postcode") || storageGet("owStockPostcode");
     const initialRadiusKm = params.get("radiusKm");
 
     if (initialSku) productInput.value = initialSku;
-    if (initialState) stateInput.value = initialState.toUpperCase();
+    if (initialState) stateInput.value = initialState.toUpperCase() === "ALL" ? "all" : initialState.toUpperCase();
+    if (!stateInput.value) stateInput.value = "all";
     if (initialPostcode) postcodeInput.value = initialPostcode;
-    if (initialRadiusKm) radiusInput.value = initialRadiusKm;
+    if (initialRadiusKm && [...radiusInput.options].some((o) => o.value === initialRadiusKm)) {
+      radiusInput.value = initialRadiusKm;
+    }
 
     applyLang();
 
@@ -1354,7 +1720,8 @@
     });
 
     if (initialSku) {
-      runSearch();
+      const sku = extractSku(initialSku);
+      if (sku) runCheck(sku);
     }
   </script>
 </body>

@@ -11,10 +11,11 @@ import {
 } from "./src/apple/catalog-au.mjs";
 import { fetchFulfillment, scanStores } from "./src/apple/fulfillment.mjs";
 import { AppleWatcher } from "./src/apple/watcher.mjs";
+import { resolveOrigin, storesWithinRadius } from "./src/officeworks/geo.mjs";
 
 export { AppleWatcher };
 
-const VERSION = "2026-10-28-v16-apple-pickup";
+const VERSION = "2026-10-28-v17-ow-radius-search";
 
 const APPLE_CHECK_CACHE_SECONDS = 20;
 
@@ -27,6 +28,10 @@ const OW = {
 };
 
 const MAX_BATCH_SIZE = 20;
+
+// Availability changes slowly enough that repeat checks within a minute can
+// share one upstream call per store.
+const AVAILABILITY_CACHE_SECONDS = 60;
 
 const ALLOWED_STATES = new Set([
   "all",
@@ -124,11 +129,13 @@ async function handleApi(url, path, env) {
     const inputState = normaliseState(url.searchParams.get("state") || "all");
     const postcode = normalisePostcode(url.searchParams.get("postcode"));
     const radiusKm = clampNumber(url.searchParams.get("radiusKm"), 1, 250, 25);
-    const resolvedState = resolveState(inputState, postcode);
+    const origin = originFromParams(url, postcode);
+    const resolvedState = origin ? inputState : resolveState(inputState, postcode);
 
     const result = await getStores({
       state: resolvedState,
       postcode,
+      origin,
       radiusKm
     });
 
@@ -139,10 +146,25 @@ async function handleApi(url, path, env) {
       resolvedState,
       postcode,
       radiusKm,
+      origin: publicOrigin(origin),
       count: result.stores.length,
       filterMode: result.filterMode,
       stores: result.stores
     });
+  }
+
+  // Keyword search for the product picker. Example: /api/search?q=ipad
+  if (path === "/api/search") {
+    const query = String(url.searchParams.get("q") || "").trim().slice(0, 80);
+
+    if (query.length < 2) {
+      return json({ ok: false, error: "Query must be at least 2 characters" }, 400);
+    }
+
+    const limit = clampInt(url.searchParams.get("limit"), 1, 20, 8);
+    const products = await searchProducts(query, limit);
+
+    return json({ ok: true, version: VERSION, query, count: products.length, products });
   }
 
   if (path === "/api/store-search") {
@@ -251,7 +273,8 @@ async function handleApi(url, path, env) {
       MAX_BATCH_SIZE,
       MAX_BATCH_SIZE
     );
-    const resolvedState = resolveState(inputState, postcode);
+    const origin = originFromParams(url, postcode);
+    const resolvedState = origin ? inputState : resolveState(inputState, postcode);
 
     if (!sku) {
       return json({ ok: false, error: "Missing or invalid sku" }, 400);
@@ -259,11 +282,16 @@ async function handleApi(url, path, env) {
 
     const startedAt = Date.now();
 
+    // product=0 lets the page fetch /api/product separately: Officeworks'
+    // product search can take 10+ seconds and should not hold up stock rows.
+    const includeProduct = url.searchParams.get("product") !== "0";
+
     const [product, storeResult] = await Promise.all([
-      getProduct(sku),
+      includeProduct ? getProduct(sku) : null,
       getStores({
         state: resolvedState,
         postcode,
+        origin,
         radiusKm
       })
     ]);
@@ -312,6 +340,8 @@ async function handleApi(url, path, env) {
         state: store.state,
         postcode: store.postcode,
         phone: store.phone,
+        lat: store.lat,
+        lng: store.lng,
         distanceKm: store.distanceKm,
         distanceSource: store.distanceSource,
         postcodeScore: store.postcodeScore,
@@ -325,6 +355,7 @@ async function handleApi(url, path, env) {
         rawSignal: parsed.rawSignal,
         collectEstimation: parsed.collectEstimation,
         deliveryEstimation: parsed.deliveryEstimation,
+        quickCollect: parsed.quickCollect,
         error
       };
     });
@@ -356,6 +387,7 @@ async function handleApi(url, path, env) {
       resolvedState,
       postcode,
       radiusKm,
+      origin: publicOrigin(origin),
       filterMode: storeResult.filterMode,
       paging: {
         offset,
@@ -560,10 +592,27 @@ async function fetchAvailabilityRaw(storeId, postcode, sku) {
     `/postcode/${encodeURIComponent(postcode)}` +
     `?partNumbers=${encodeURIComponent(sku)}`;
 
-  return fetchJson(url, {
+  const cache = caches.default;
+  const cacheKey = new Request(`https://stock-level-cache.local/availability-v1?store=${storeId}&postcode=${postcode}&sku=${sku}`);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached.json();
+
+  const raw = await fetchJson(url, {
     cacheTtl: 0,
     label: `current availability ${storeId}/${postcode}/${sku}`
   });
+
+  await cache.put(
+    cacheKey,
+    new Response(JSON.stringify(raw), {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": `public, max-age=${AVAILABILITY_CACHE_SECONDS}`
+      }
+    })
+  );
+
+  return raw;
 }
 
 function parseCurrentAvailability(raw, sku) {
@@ -603,13 +652,14 @@ function parseCurrentAvailability(raw, sku) {
     rawSignal:
       `inStore=${inStoreQuantity}, clickAndCollect=${clickAndCollectQuantity}, delivery=${deliveryQuantity}`,
     collectEstimation: target.collectEstimation || "",
-    deliveryEstimation: target.deliveryEstimation || ""
+    deliveryEstimation: target.deliveryEstimation || "",
+    quickCollect: target.isQuickCollectAvailable === true
   };
 }
 
 async function getProduct(sku) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/product-v15?sku=${sku}`);
+  const cacheKey = new Request(`https://stock-level-cache.local/product-v16?sku=${sku}`);
 
   const cached = await cache.match(cacheKey);
   if (cached) return cached.json();
@@ -618,7 +668,7 @@ async function getProduct(sku) {
 
   try {
     data = await fetchJson(OW.productSearch + encodeURIComponent(sku), {
-      cacheTtl: 3600,
+      cacheTtl: 21600,
       label: "Officeworks product search"
     });
   } catch {
@@ -640,7 +690,11 @@ async function getProduct(sku) {
 
   const first = exact || products[0] || null;
 
-  const priceInfo = extractPriceInfo(first);
+  const directPrice = first && first.price && Number(first.price.single);
+  const priceInfo =
+    directPrice > 0
+      ? { display: formatAudPrice(directPrice), value: directPrice, source: "price.single" }
+      : extractPriceInfo(first);
 
   const product = {
     sku,
@@ -659,17 +713,21 @@ async function getProduct(sku) {
     price: priceInfo.display,
     priceValue: priceInfo.value,
     priceSource: priceInfo.source,
+    image: officeworksImage(first),
+    url: officeworksProductUrl(first),
+    brand: String((first && first.attributes && first.attributes.brand) || ""),
     rawFound: Boolean(first)
   };
 
   const response = new Response(JSON.stringify(product), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "public, max-age=3600"
+      "Cache-Control": "public, max-age=21600"
     }
   });
 
-  await cache.put(cacheKey, response.clone());
+  // Only cache real hits, so one slow or failed lookup is retried next time.
+  if (first) await cache.put(cacheKey, response.clone());
   return product;
 }
 
@@ -754,9 +812,9 @@ function formatAudPrice(value) {
   return `$${n.toFixed(2)}`;
 }
 
-async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {
+async function getStores({ state = "all", postcode = "", origin = null, radiusKm = 25 } = {}) {
   const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/stores-v10?state=${state}`);
+  const cacheKey = new Request("https://stock-level-cache.local/stores-v11");
 
   let stores;
 
@@ -780,12 +838,6 @@ async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {
       .map(normaliseStore)
       .filter((store) => store.storeId && store.storeName);
 
-    if (state !== "all") {
-      stores = stores.filter(
-        (store) => String(store.state || "").toUpperCase() === state
-      );
-    }
-
     const response = new Response(JSON.stringify(stores), {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
@@ -794,6 +846,21 @@ async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {
     });
 
     await cache.put(cacheKey, response.clone());
+  }
+
+  if (state !== "all") {
+    stores = stores.filter((store) => String(store.state || "").toUpperCase() === state);
+  }
+
+  // Real distance from the postcode centre or the browser's location.
+  if (origin) {
+    return {
+      stores: storesWithinRadius(stores, origin, radiusKm).map((store) => ({
+        ...store,
+        distanceSource: origin.source
+      })),
+      filterMode: "radius"
+    };
   }
 
   if (!postcode) {
@@ -827,9 +894,86 @@ async function getStores({ state = "all", postcode = "", radiusKm = 25 } = {}) {
   };
 }
 
+function originFromParams(url, postcode) {
+  return resolveOrigin({
+    lat: url.searchParams.get("lat"),
+    lng: url.searchParams.get("lng"),
+    postcode
+  });
+}
+
+// Rounded so responses do not echo a visitor's exact location.
+function publicOrigin(origin) {
+  if (!origin) return null;
+  return {
+    source: origin.source,
+    postcode: origin.postcode,
+    state: origin.state,
+    lat: Math.round(origin.lat * 100) / 100,
+    lng: Math.round(origin.lng * 100) / 100
+  };
+}
+
+async function searchProducts(query, limit) {
+  const cache = caches.default;
+  const cacheKey = new Request(
+    `https://stock-level-cache.local/search-v1?q=${encodeURIComponent(query.toLowerCase())}&limit=${limit}`
+  );
+
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached.json();
+
+  const data = await fetchJson(
+    OW.productSearch.replace("pageSize=50", `pageSize=${limit}`) + encodeURIComponent(query),
+    { cacheTtl: 3600, label: "Officeworks product search" }
+  );
+
+  const products = (Array.isArray(data && data.products) ? data.products : [])
+    .map((item) => {
+      const identity = item.identity || {};
+      const price = item.price && Number(item.price.single);
+      return {
+        sku: String(identity.partNumber || item.partNumber || "").toUpperCase(),
+        name: decodeHtml(String(identity.name || item.name || "")),
+        price: price > 0 ? formatAudPrice(price) : "",
+        image: officeworksImage(item),
+        url: officeworksProductUrl(item),
+        brand: String((item.attributes && item.attributes.brand) || "")
+      };
+    })
+    .filter((product) => product.sku && product.name)
+    .slice(0, limit);
+
+  await cache.put(
+    cacheKey,
+    new Response(JSON.stringify(products), {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "public, max-age=3600"
+      }
+    })
+  );
+
+  return products;
+}
+
+function officeworksImage(product) {
+  const description = (product && product.description) || {};
+  const src = String(description.thumbnail || description.fullImage || "");
+  return src.startsWith("//") ? `https:${src}` : src;
+}
+
+function officeworksProductUrl(product) {
+  const src = String((product && product.url) || "");
+  if (src.startsWith("//")) return `https:${src}`;
+  if (src.startsWith("/")) return `https://www.officeworks.com.au${src}`;
+  return src;
+}
+
 function normaliseStore(store) {
   const addressObj = store && store.address ? store.address : {};
   const contactObj = store && store.contact ? store.contact : {};
+  const locationObj = store && store.location ? store.location : {};
 
   return {
     storeId: String(
@@ -853,8 +997,15 @@ function normaliseStore(store) {
     ),
     state: String(addressObj.storeState || addressObj.state || "").toUpperCase(),
     postcode: String(addressObj.storePostcode || addressObj.postcode || ""),
-    phone: String(contactObj.storeTelephone || contactObj.phone || store.phone || "")
+    phone: String(contactObj.storeTelephone || contactObj.phone || store.phone || ""),
+    lat: parseCoord(locationObj.lat ?? locationObj.storeGeocodeLat),
+    lng: parseCoord(locationObj.lon ?? locationObj.storeGeocodeLon)
   };
+}
+
+function parseCoord(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n !== 0 ? n : null;
 }
 
 function cleanPath(pathname) {

@@ -4,33 +4,34 @@
 export const COUNTRY = "au";
 export const APPLE_BASE = "https://www.apple.com/au";
 
-// [storeId, name, city, lat, lng, timezone, state]
+// [storeId, name, city, lat, lng, timezone, state, postcode]
 const STORE_ROWS = [
-  ["R254", "Bondi", "Bondi Junction", -33.89228, 151.2503, "Australia/Sydney", "NSW"],
-  ["R508", "Booragoon", "Booragoon", -32.03422, 115.83735, "Australia/Perth", "WA"],
-  ["R466", "Brisbane", "Brisbane City", -27.46835, 153.027261, "Australia/Brisbane", "QLD"],
-  ["R523", "Broadway", "Broadway", -33.88367, 151.19421, "Australia/Sydney", "NSW"],
-  ["R483", "Canberra", "Canberra", -35.28026, 149.13371, "Australia/Sydney", "ACT"],
-  ["R509", "Carindale", "Carindale", -27.50227, 153.10189, "Australia/Brisbane", "QLD"],
-  ["R344", "Castle Towers", "Castle Hill", -33.730556, 151.006111, "Australia/Sydney", "NSW"],
-  ["R180", "Chadstone", "Chadstone", -37.885829, 145.082502, "Australia/Melbourne", "VIC"],
-  ["R385", "Charlestown", "Charlestown", -32.96363, 151.69406, "Australia/Sydney", "NSW"],
-  ["R253", "Chatswood Chase", "Chatswood", -33.79499, 151.18613, "Australia/Sydney", "NSW"],
-  ["R384", "Chermside", "Chermside", -27.3856, 153.0302, "Australia/Brisbane", "QLD"],
-  ["R342", "Doncaster", "Doncaster", -37.78442, 145.1261, "Australia/Melbourne", "VIC"],
-  ["R530", "Fountain Gate", "Fountain Gate", -38.01799, 145.30466, "Australia/Melbourne", "VIC"],
-  ["R504", "Highpoint", "Maribyrnong", -37.77238, 144.89015, "Australia/Melbourne", "VIC"],
-  ["R606", "Miranda", "Miranda", -34.03492, 151.10088, "Australia/Sydney", "NSW"],
-  ["R440", "Penrith", "Penrith", -33.751287, 150.694699, "Australia/Sydney", "NSW"],
-  ["R386", "Perth City", "Perth", -31.952658, 115.858728, "Australia/Perth", "WA"],
-  ["R351", "Robina", "Robina", -28.077575, 153.385213, "Australia/Brisbane", "QLD"],
-  ["R405", "Rundle Place", "Adelaide", -34.922821, 138.602631, "Australia/Adelaide", "SA"],
-  ["R343", "Southland", "Cheltenham", -37.958244, 145.052434, "Australia/Melbourne", "VIC"],
-  ["R238", "Sydney", "Sydney", -33.86889, 151.20678, "Australia/Sydney", "NSW"]
+  ["R254", "Bondi", "Bondi Junction", -33.89228, 151.2503, "Australia/Sydney", "NSW", "2022"],
+  ["R508", "Booragoon", "Booragoon", -32.03422, 115.83735, "Australia/Perth", "WA", "6154"],
+  ["R466", "Brisbane", "Brisbane City", -27.46835, 153.027261, "Australia/Brisbane", "QLD", "4000"],
+  ["R523", "Broadway", "Broadway", -33.88367, 151.19421, "Australia/Sydney", "NSW", "2007"],
+  ["R483", "Canberra", "Canberra", -35.28026, 149.13371, "Australia/Sydney", "ACT", "2601"],
+  ["R509", "Carindale", "Carindale", -27.50227, 153.10189, "Australia/Brisbane", "QLD", "4152"],
+  ["R344", "Castle Towers", "Castle Hill", -33.730556, 151.006111, "Australia/Sydney", "NSW", "2154"],
+  ["R180", "Chadstone", "Chadstone", -37.885829, 145.082502, "Australia/Melbourne", "VIC", "3148"],
+  ["R385", "Charlestown", "Charlestown", -32.96363, 151.69406, "Australia/Sydney", "NSW", "2290"],
+  ["R253", "Chatswood Chase", "Chatswood", -33.79499, 151.18613, "Australia/Sydney", "NSW", "2067"],
+  ["R384", "Chermside", "Chermside", -27.3856, 153.0302, "Australia/Brisbane", "QLD", "4032"],
+  ["R342", "Doncaster", "Doncaster", -37.78442, 145.1261, "Australia/Melbourne", "VIC", "3108"],
+  ["R530", "Fountain Gate", "Fountain Gate", -38.01799, 145.30466, "Australia/Melbourne", "VIC", "3805"],
+  ["R504", "Highpoint", "Maribyrnong", -37.77238, 144.89015, "Australia/Melbourne", "VIC", "3032"],
+  ["R606", "Miranda", "Miranda", -34.03492, 151.10088, "Australia/Sydney", "NSW", "2228"],
+  ["R440", "Penrith", "Penrith", -33.751287, 150.694699, "Australia/Sydney", "NSW", "2750"],
+  ["R386", "Perth City", "Perth", -31.952658, 115.858728, "Australia/Perth", "WA", "6000"],
+  ["R351", "Robina", "Robina", -28.077575, 153.385213, "Australia/Brisbane", "QLD", "4226"],
+  ["R405", "Rundle Place", "Adelaide", -34.922821, 138.602631, "Australia/Adelaide", "SA", "5000"],
+  ["R343", "Southland", "Cheltenham", -37.958244, 145.052434, "Australia/Melbourne", "VIC", "3192"],
+  ["R238", "Sydney", "Sydney", -33.86889, 151.20678, "Australia/Sydney", "NSW", "2000"]
 ];
 
-export const STORES = STORE_ROWS.map(([id, name, city, lat, lng, tz, state]) => ({
+export const STORES = STORE_ROWS.map(([id, name, city, lat, lng, tz, state, postcode]) => ({
   id,
+  postcode,
   name,
   city,
   lat,
@@ -44,7 +45,7 @@ export const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
 // One store per metro area. With searchNearby=true Apple returns the anchor
 // plus nearby stores, so these few requests cover the country. Any store that
 // is not returned is queried directly on the next round.
-export const DEFAULT_ANCHORS = ["R238", "R180", "R466", "R405", "R386", "R483"];
+export const DEFAULT_ANCHORS = ["R238", "R180", "R466", "R405", "R386", "R483", "2000"];
 
 const PRO_COLORS = [
   ["black", "Black"],

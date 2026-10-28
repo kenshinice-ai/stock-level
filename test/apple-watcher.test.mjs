@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { STORES } from "../src/apple/catalog-au.mjs";
 import { AppleWatcher, readWatchConfig } from "../src/apple/watcher.mjs";
 
 function fakeState() {
@@ -26,7 +27,7 @@ function fakeFetch(available, sent, { blocked = false } = {}) {
     }
     if (blocked()) return new Response("<!doctype html>", { status: 541 });
     const u = new URL(url);
-    const anchor = u.searchParams.get("store");
+    const anchor = STORES.find((s) => s.postcode === u.searchParams.get("postalCode")).id;
     const parts = [...u.searchParams].filter(([k]) => k.startsWith("parts.")).map(([, v]) => v);
     const nearby = anchor === "R180" ? ["R180", "R343", "R342", "R504", "R530"] : [anchor];
     const stores = nearby.map((id) => ({

@@ -2,6 +2,8 @@
 // endpoint (the one behind "Check availability" on apple.com product pages).
 // Shared by the Cloudflare Worker and the local agent (agent/apple-agent.mjs).
 
+import { STORE_BY_ID } from "./catalog-au.mjs";
+
 export const FULFILLMENT_PATH = "/shop/fulfillment-messages";
 
 export class UpstreamBlockedError extends Error {
@@ -12,16 +14,24 @@ export class UpstreamBlockedError extends Error {
   }
 }
 
+// Same query shape as apple.com's own "iPhone Availability" dialog
+// (captured 2026-10-28): the search is by the anchor store's postcode and
+// Apple returns the stores near it.
 export function buildFulfillmentUrl(appleBase, anchorStore, parts) {
+  const store = STORE_BY_ID[anchorStore];
   const qs = new URLSearchParams();
   qs.set("fae", "true");
-  qs.set("pl", "true");
-  qs.set("mts.0", "regular");
-  qs.set("mts.1", "compact");
+  if (store) {
+    qs.set("postalCode", store.postcode);
+    qs.set("state", store.state);
+    qs.set("city", store.city);
+  } else {
+    qs.set("store", anchorStore);
+  }
   parts.forEach((part, i) => qs.set(`parts.${i}`, part));
-  qs.set("searchNearby", "true");
-  qs.set("store", anchorStore);
-  return `${appleBase}${FULFILLMENT_PATH}?${qs.toString()}`;
+  qs.set("mts.0", "expanded");
+  // Part numbers keep their "/" unescaped, as apple.com sends them.
+  return `${appleBase}${FULFILLMENT_PATH}?${qs.toString().replace(/%2F/g, "/")}`;
 }
 
 // Normalises one fulfillment-messages response.
@@ -107,7 +117,7 @@ export async function fetchFulfillment(appleBase, anchorStore, parts, options = 
   if ([403, 429, 503, 541].includes(response.status) || (!looksJson && response.ok)) {
     throw new UpstreamBlockedError(
       response.status,
-      `Apple returned HTTP ${response.status} (${looksJson ? "json" : "non-JSON"}) for store ${anchorStore}`
+      `Apple returned HTTP ${response.status} (${looksJson ? "json" : "non-JSON"}) for store ${anchorStore}: ${url}`
     );
   }
 

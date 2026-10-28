@@ -29,13 +29,14 @@ function response(stores) {
   return { head: { status: "200" }, body: { content: { pickupMessage: { stores } } } };
 }
 
-test("buildFulfillmentUrl encodes parts and anchor store", () => {
+test("buildFulfillmentUrl matches the apple.com availability dialog request", () => {
+  assert.equal(
+    buildFulfillmentUrl(APPLE_BASE, "R180", ["MK2G4X/A"]),
+    "https://www.apple.com/au/shop/fulfillment-messages?fae=true&postalCode=3148&state=VIC&city=Chadstone&parts.0=MK2G4X/A&mts.0=expanded"
+  );
   const url = new URL(buildFulfillmentUrl(APPLE_BASE, "R238", ["MK2E4X/A", "MK2D4X/A"]));
-  assert.equal(url.pathname, "/au/shop/fulfillment-messages");
-  assert.equal(url.searchParams.get("parts.0"), "MK2E4X/A");
+  assert.equal(url.searchParams.get("postalCode"), "2000");
   assert.equal(url.searchParams.get("parts.1"), "MK2D4X/A");
-  assert.equal(url.searchParams.get("store"), "R238");
-  assert.equal(url.searchParams.get("searchNearby"), "true");
 });
 
 test("parseFulfillment normalises availability per store and part", () => {
@@ -71,7 +72,8 @@ test("fetchFulfillment treats 541 and HTML responses as blocked", async () => {
 test("scanStores queries anchors, then any target store not covered", async () => {
   const calls = [];
   const fetchImpl = async (url) => {
-    const anchor = new URL(url).searchParams.get("store");
+    const postcode = new URL(url).searchParams.get("postalCode");
+    const anchor = STORES.find((s) => s.postcode === postcode).id;
     calls.push(anchor);
     const nearby = anchor === "R180" ? ["R180", "R343", "R342"] : [anchor];
     return new Response(JSON.stringify(response(nearby.map((id) => storeEntry(id, { "MK2E4X/A": "unavailable" })))));

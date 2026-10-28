@@ -1,6 +1,6 @@
 # Apple iPhone（Duo / 18 Pro / 18 Pro Max）门店取货库存查询 — 设计方案
 
-> 状态：设计稿（未实现）· 日期：2026-10-28
+> 状态：Phase 0 + 本地提醒脚本已实现（`agent/`、`/apple`、`/api/apple/*`），DO / D1 / WebSocket 待做 · 日期：2026-10-28
 > 目标：在现有 `stock-level`（Officeworks 库存查询，Cloudflare Worker）基础上，增加 Apple Store 澳洲 21 家门店的 iPhone 取货库存实时查询 + 到货提醒。
 
 ---

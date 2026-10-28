@@ -1,0 +1,3 @@
+agent/.env
+.wrangler/
+node_modules/

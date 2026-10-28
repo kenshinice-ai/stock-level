@@ -1,4 +1,18 @@
-const VERSION = "2026-07-03-v15-product-price-summary";
+import {
+  APPLE_BASE,
+  FAMILIES as APPLE_FAMILIES,
+  STORES as APPLE_STORES,
+  STORE_BY_ID as APPLE_STORE_BY_ID,
+  describePart,
+  pickAnchors,
+  productUrl,
+  selectParts
+} from "./src/apple/catalog-au.mjs";
+import { fetchFulfillment, scanStores } from "./src/apple/fulfillment.mjs";
+
+const VERSION = "2026-10-28-v16-apple-pickup";
+
+const APPLE_CHECK_CACHE_SECONDS = 20;
 
 const OW = {
   stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
@@ -66,6 +80,10 @@ export default {
 };
 
 async function handleApi(url, path) {
+  if (path.startsWith("/api/apple/")) {
+    return handleAppleApi(url, path);
+  }
+
   if (path === "/api/health") {
     return json({
       ok: true,
@@ -353,6 +371,173 @@ async function handleApi(url, path) {
     },
     404
   );
+}
+
+async function handleAppleApi(url, path) {
+  if (path === "/api/apple/config") {
+    return json({
+      ok: true,
+      version: VERSION,
+      cc: "au",
+      appleBase: APPLE_BASE,
+      stores: APPLE_STORES,
+      families: APPLE_FAMILIES
+    });
+  }
+
+  // Debug: one raw fulfillment-messages call, to see what Apple returns to
+  // this Worker. Example: /api/apple/raw?store=R238&parts=MK2E4X/A
+  if (path === "/api/apple/raw") {
+    const store = normaliseAppleStore(url.searchParams.get("store")) || "R238";
+    const parts = parseAppleParts(url.searchParams.get("parts"));
+    const startedAt = Date.now();
+
+    try {
+      const result = await fetchFulfillment(APPLE_BASE, store, parts.length ? parts : ["MK2E4X/A"]);
+      return json({
+        ok: true,
+        version: VERSION,
+        upstreamUrl: result.url,
+        durationMs: Date.now() - startedAt,
+        parsed: result.parsed,
+        raw: result.raw
+      });
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          version: VERSION,
+          blocked: err && err.name === "UpstreamBlockedError",
+          upstreamStatus: (err && err.status) || null,
+          error: err && err.message ? err.message : "Apple request failed",
+          durationMs: Date.now() - startedAt
+        },
+        502
+      );
+    }
+  }
+
+  // Current pickup availability for one family across the selected stores.
+  // Example: /api/apple/check?family=iphoneduo&stores=VIC&caps=256gb
+  if (path === "/api/apple/check") {
+    const family = String(url.searchParams.get("family") || "iphoneduo").toLowerCase();
+
+    if (!APPLE_FAMILIES[family]) {
+      return json({ ok: false, error: `Unknown family. Use one of: ${Object.keys(APPLE_FAMILIES).join(", ")}` }, 400);
+    }
+
+    const caps = csvParam(url.searchParams.get("caps"));
+    const colors = csvParam(url.searchParams.get("colors"));
+    const storeIds = resolveAppleStores(url.searchParams.get("stores"));
+    const parts = selectParts(family, { caps, colors });
+
+    if (!parts.length || !storeIds.length) {
+      return json({ ok: false, error: "No matching stores or configurations" }, 400);
+    }
+
+    // All visitors asking the same question share one upstream scan.
+    const cache = caches.default;
+    const cacheKey = new Request(
+      `https://stock-level-cache.local/apple-check-v1?family=${family}&parts=${parts.join(",")}&stores=${storeIds.join(",")}`
+    );
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      const payload = await cached.json();
+      return json({ ...payload, cached: true });
+    }
+
+    const startedAt = Date.now();
+    const scan = await scanStores(APPLE_BASE, parts, {
+      anchors: pickAnchors(storeIds),
+      targetStores: storeIds
+    });
+
+    const rows = storeIds.map((id) => {
+      const meta = APPLE_STORE_BY_ID[id];
+      const found = scan.stores.get(id);
+      const available = found
+        ? parts
+            .filter((part) => found.parts[part] && found.parts[part].status === "available")
+            .map((part) => ({ ...describePart(part), quote: found.parts[part].quote, url: productUrl(part) }))
+        : [];
+
+      return {
+        storeId: id,
+        storeName: meta.name,
+        city: meta.city,
+        state: meta.state,
+        lat: meta.lat,
+        lng: meta.lng,
+        status: !found ? "unknown" : !found.pickupEligible ? "no_pickup" : available.length ? "in_stock" : "sold_out",
+        available
+      };
+    });
+
+    const payload = {
+      ok: !(scan.blocked && scan.stores.size === 0),
+      version: VERSION,
+      family,
+      familyName: APPLE_FAMILIES[family].name,
+      parts,
+      checkedAt: new Date().toISOString(),
+      summary: {
+        stores: rows.length,
+        storesWithStock: rows.filter((row) => row.status === "in_stock").length,
+        requests: scan.requests,
+        blocked: scan.blocked,
+        durationMs: Date.now() - startedAt
+      },
+      errors: scan.errors,
+      rows
+    };
+
+    if (payload.ok) {
+      await cache.put(
+        cacheKey,
+        new Response(JSON.stringify(payload), {
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": `public, max-age=${APPLE_CHECK_CACHE_SECONDS}`
+          }
+        })
+      );
+    }
+
+    return json(payload, payload.ok ? 200 : 502);
+  }
+
+  return json({ ok: false, version: VERSION, error: "API route not found", path }, 404);
+}
+
+function normaliseAppleStore(value) {
+  const id = String(value || "").trim().toUpperCase();
+  return /^R\d{3}$/.test(id) ? id : "";
+}
+
+function parseAppleParts(value) {
+  return csvParam(value)
+    .map((part) => part.toUpperCase())
+    .filter((part) => /^[A-Z0-9]{5,8}\/A$/.test(part))
+    .slice(0, 20);
+}
+
+// "all", store ids (R180), states (VIC) or store names, comma separated.
+function resolveAppleStores(value) {
+  const tokens = csvParam(value || "all").map((token) => token.toUpperCase());
+  if (!tokens.length || tokens.includes("ALL")) return APPLE_STORES.map((store) => store.id);
+
+  return APPLE_STORES.filter((store) =>
+    tokens.some(
+      (token) => store.id === token || store.state === token || store.name.toUpperCase() === token
+    )
+  ).map((store) => store.id);
+}
+
+function csvParam(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 async function fetchAvailabilityRaw(storeId, postcode, sku) {

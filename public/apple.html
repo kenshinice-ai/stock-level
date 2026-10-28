@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>iPhone 门店库存 · Apple Store AU</title>
+  <meta name="description" content="Apple Store Australia iPhone Duo / 18 Pro pickup availability. Designed by Lee." />
+  <style>
+    :root {
+      --bg: #eef6fb;
+      --surface: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: rgba(148, 163, 184, 0.3);
+      --blue: #155eef;
+      --green: #16a34a;
+      --green-bg: rgba(22, 163, 74, 0.1);
+      --red: #dc2626;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+    }
+    .wrap { width: min(980px, calc(100% - 32px)); margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 0 48px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .top a { color: var(--muted); font-size: 13px; font-weight: 700; text-decoration: none; }
+    h1 { margin: 0 0 8px; font-size: clamp(30px, 6vw, 52px); letter-spacing: -0.05em; line-height: 1; }
+    .sub { margin: 0 0 20px; color: var(--muted); line-height: 1.6; }
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+    select, button {
+      min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); font: inherit; font-size: 15px;
+    }
+    button { background: var(--blue); color: #fff; border: none; font-weight: 800; cursor: pointer; }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .summary {
+      display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 14px 16px; margin-bottom: 14px;
+      border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); font-size: 14px;
+    }
+    .summary b { color: var(--text); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 6px; }
+    .dot.on { background: var(--green); }
+    .error { color: var(--red); font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .card { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    .card.in { border-color: rgba(22, 163, 74, 0.45); background: var(--green-bg); }
+    .card h3 { margin: 0; font-size: 17px; }
+    .card .city { color: var(--muted); font-size: 13px; }
+    .badge { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; background: rgba(15, 23, 42, 0.06); color: var(--muted); }
+    .card.in .badge { background: var(--green); color: #fff; }
+    .cfgs { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    .cfgs a {
+      display: block; padding: 10px 12px; border-radius: 10px; background: var(--green); color: #fff;
+      font-weight: 800; font-size: 14px; text-decoration: none;
+    }
+    .cfgs small { display: block; font-weight: 600; opacity: 0.85; }
+    .note { margin-top: 20px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <strong>Stock Level · Apple</strong>
+      <a href="/">Officeworks →</a>
+    </div>
+
+    <h1>iPhone 门店取货库存</h1>
+    <p class="sub">澳洲 Apple Store 实时取货库存。有货立刻点「预约」到 Apple 官网选 Pickup 付款，库存通常只有几分钟。</p>
+
+    <div class="filters">
+      <select id="family" aria-label="Model"></select>
+      <select id="region" aria-label="Region">
+        <option value="all">全澳 All</option>
+        <option value="VIC">VIC</option>
+        <option value="NSW">NSW</option>
+        <option value="QLD">QLD</option>
+        <option value="ACT">ACT</option>
+        <option value="SA">SA</option>
+        <option value="WA">WA</option>
+      </select>
+      <select id="cap" aria-label="Storage"><option value="">任意容量</option></select>
+      <select id="color" aria-label="Colour"><option value="">任意颜色</option></select>
+      <button id="refresh" type="button">刷新</button>
+    </div>
+
+    <div class="summary" id="summary"><span><span class="dot" id="liveDot"></span><span id="liveText">加载中…</span></span></div>
+    <div class="grid" id="grid"></div>
+
+    <p class="note">独立工具，与 Apple 无关，以 Apple 官网为准。每 30 秒自动刷新（页面在前台时）。想要手机秒级提醒，请运行 Telegram 监控脚本（agent/README.md）。</p>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const REFRESH_MS = 30000;
+    let config = null;
+    let timer = null;
+    let busy = false;
+
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+    function readParams() {
+      const p = new URLSearchParams(location.search);
+      return { family: p.get("family") || "iphoneduo", region: p.get("region") || "all", cap: p.get("cap") || "", color: p.get("color") || "" };
+    }
+
+    function fillOptions(familyKey) {
+      const fam = config.families[familyKey];
+      const keepCap = $("cap").value, keepColor = $("color").value;
+      $("cap").innerHTML = '<option value="">任意容量</option>' + fam.caps.map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+      $("color").innerHTML = '<option value="">任意颜色</option>' + fam.colors.map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+      $("cap").value = fam.caps.some(([k]) => k === keepCap) ? keepCap : "";
+      $("color").value = fam.colors.some(([k]) => k === keepColor) ? keepColor : "";
+    }
+
+    async function load() {
+      const res = await fetch("/api/apple/config");
+      config = await res.json();
+      $("family").innerHTML = Object.values(config.families).map((f) => `<option value="${f.family}">${esc(f.name)}</option>`).join("");
+      const p = readParams();
+      $("family").value = config.families[p.family] ? p.family : "iphoneduo";
+      $("region").value = p.region;
+      fillOptions($("family").value);
+      $("cap").value = p.cap;
+      $("color").value = p.color;
+      check();
+    }
+
+    async function check() {
+      if (busy) return;
+      busy = true;
+      clearTimeout(timer);
+      $("refresh").disabled = true;
+
+      const q = new URLSearchParams({ family: $("family").value, stores: $("region").value });
+      if ($("cap").value) q.set("caps", $("cap").value);
+      if ($("color").value) q.set("colors", $("color").value);
+      const pageQ = new URLSearchParams({ family: $("family").value, region: $("region").value, cap: $("cap").value, color: $("color").value });
+      history.replaceState(null, "", `?${pageQ}`);
+
+      try {
+        const res = await fetch(`/api/apple/check?${q}`);
+        const data = await res.json();
+        render(data);
+      } catch (err) {
+        renderError(err.message || "Network error");
+      } finally {
+        busy = false;
+        $("refresh").disabled = false;
+        if (!document.hidden) timer = setTimeout(check, REFRESH_MS);
+      }
+    }
+
+    function render(data) {
+      if (!data.ok) {
+        const blocked = data.summary && data.summary.blocked;
+        renderError(blocked ? "Apple 暂时拒绝了服务器的查询（可能限制了云服务器访问）。请使用本地 Telegram 监控脚本。" : (data.error || "查询失败"));
+        $("grid").innerHTML = "";
+        return;
+      }
+
+      const rows = data.rows.slice().sort((a, b) => (b.status === "in_stock") - (a.status === "in_stock") || a.storeName.localeCompare(b.storeName));
+      const time = new Date(data.checkedAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", second: "2-digit" });
+
+      $("liveDot").className = "dot on";
+      $("liveText").innerHTML = `<b>${esc(data.familyName)}</b> · <b>${data.summary.storesWithStock}</b> / ${data.summary.stores} 家门店有货 · ${time} 检查${data.cached ? "（缓存）" : ""}`;
+
+      $("grid").innerHTML = rows.map((row) => {
+        const inStock = row.status === "in_stock";
+        const label = { in_stock: "有货 In stock", sold_out: "售罄 Sold out", no_pickup: "不支持取货", unknown: "未知" }[row.status] || row.status;
+        const cfgs = inStock
+          ? `<div class="cfgs">${row.available.map((a) => `<a href="${esc(a.url)}" target="_blank" rel="noopener">预约 ${esc(a.label.replace(data.familyName + " ", ""))}<small>${esc(a.quote || "")}${a.price ? ` · A$${a.price}` : ""}</small></a>`).join("")}</div>`
+          : "";
+        return `<article class="card${inStock ? " in" : ""}"><h3>${esc(row.storeName)}</h3><div class="city">${esc(row.city)}, ${esc(row.state)}</div><span class="badge">${label}</span>${cfgs}</article>`;
+      }).join("");
+    }
+
+    function renderError(message) {
+      $("liveDot").className = "dot";
+      $("liveText").innerHTML = `<span class="error">${esc(message)}</span>`;
+    }
+
+    $("family").addEventListener("change", () => { fillOptions($("family").value); check(); });
+    ["region", "cap", "color"].forEach((id) => $(id).addEventListener("change", check));
+    $("refresh").addEventListener("click", check);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+
+    load().catch((err) => renderError(err.message));
+  </script>
+</body>
+</html>

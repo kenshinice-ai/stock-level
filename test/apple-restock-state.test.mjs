@@ -51,3 +51,11 @@ test("available at a store without pickup does not alert", () => {
   const t = createRestockTracker();
   assert.equal(t.update(round("available", { pickupEligible: false }), ["R180"], [PART], 0).landed.length, 0);
 });
+
+test("state survives a round trip through toJSON", () => {
+  const a = createRestockTracker({ outRounds: 1 });
+  a.update(round("available"), ["R180"], [PART], 0);
+  const b = createRestockTracker({ outRounds: 1, initial: JSON.parse(JSON.stringify(a.toJSON())) });
+  assert.equal(b.update(round("available"), ["R180"], [PART], 1000).landed.length, 0);
+  assert.equal(b.update(round("unavailable"), ["R180"], [PART], 2000).soldOut.length, 1);
+});

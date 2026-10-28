@@ -89,6 +89,7 @@
     </div>
 
     <div class="summary" id="summary"><span><span class="dot" id="liveDot"></span><span id="liveText">加载中…</span></span></div>
+    <div class="summary" id="watch" hidden></div>
     <div class="grid" id="grid"></div>
 
     <p class="note">独立工具，与 Apple 无关，以 Apple 官网为准。每 30 秒自动刷新（页面在前台时）。想要手机秒级提醒，请运行 Telegram 监控脚本（agent/README.md）。</p>
@@ -142,6 +143,7 @@
       const pageQ = new URLSearchParams({ family: $("family").value, region: $("region").value, cap: $("cap").value, color: $("color").value });
       history.replaceState(null, "", `?${pageQ}`);
 
+      loadWatch();
       try {
         const res = await fetch(`/api/apple/check?${q}`);
         const data = await res.json();
@@ -177,6 +179,29 @@
           : "";
         return `<article class="card${inStock ? " in" : ""}"><h3>${esc(row.storeName)}</h3><div class="city">${esc(row.city)}, ${esc(row.state)}</div><span class="badge">${label}</span>${cfgs}</article>`;
       }).join("");
+    }
+
+    async function loadWatch() {
+      try {
+        const res = await fetch("/api/apple/watch");
+        const d = await res.json();
+        const box = $("watch");
+        if (!d.ok) { box.hidden = true; return; }
+        const s = d.status;
+        const tg = d.telegramConfigured ? "Telegram 已连接" : "Telegram 未配置";
+        let text;
+        if (!d.enabled) text = "Cloudflare 监控已关闭";
+        else if (!s) text = "Cloudflare 监控启动中…";
+        else if (s.blocked) text = `<span class="error">Cloudflare 监控被 Apple 拒绝（第 ${s.blockedRounds} 次，HTTP ${esc((s.errors[0] || {}).status || "?")}），正在降频重试</span>`;
+        else {
+          const at = new Date(s.checkedAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", second: "2-digit" });
+          text = `Cloudflare 监控运行中：${esc(s.familyName)} · ${s.stores.length} 家店 · ${at} 检查 · 当前 ${s.inStock.length} 个配置有货`;
+        }
+        box.innerHTML = `<span><span class="dot${s && s.ok ? " on" : ""}"></span>${text} · ${tg}</span>`;
+        box.hidden = false;
+      } catch {
+        $("watch").hidden = true;
+      }
     }
 
     function renderError(message) {

@@ -178,3 +178,21 @@ export function pickAnchors(targetStoreIds) {
   }
   return [...byState.values()];
 }
+
+// "all", store ids (R180), states (VIC), store names or cities, comma separated.
+export function resolveStores(value) {
+  const tokens = String(value || "all")
+    .split(",")
+    .map((v) => v.trim().toUpperCase())
+    .filter(Boolean);
+  if (!tokens.length || tokens.includes("ALL")) return STORES.map((s) => s.id);
+  return STORES.filter((store) =>
+    tokens.some(
+      (token) =>
+        store.id === token ||
+        store.state === token ||
+        store.name.toUpperCase() === token ||
+        store.city.toUpperCase() === token
+    )
+  ).map((store) => store.id);
+}

@@ -72,6 +72,8 @@ body.content.pickupMessage.stores[] :
 
 ### 1.4 本环境实测
 
+> **2026-10-28 更新：** 生产 Worker（`stock-level.lee-liu-melbourne.workers.dev/api/apple/raw`）请求 Apple 同样返回 **HTTP 541**（R180 / R238 / R343 均如此）。结论：Cloudflare 出口被 Apple 拦截，监控改为本地脚本 `agent/apple-agent.mjs`（§4.5）为主；Cloudflare DO watcher 代码保留但默认不启用。
+
 从当前云容器直接请求 `https://www.apple.com/au/shop/fulfillment-messages?...` 返回 **HTTP 541**（Apple 对数据中心 IP 的拦截页）。这意味着：**Cloudflare Worker 出口 IP 是否能访问该接口必须先做 Spike 验证**（见 §6 Phase 0），方案里要预留「家庭采集器」备选路径。我们不做 IP 轮换 / 伪造指纹之类的绕过，只做低频、合规的读取。
 
 ---

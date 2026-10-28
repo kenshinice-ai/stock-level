@@ -8,8 +8,9 @@
 //   previous restock instead of firing a new alert.
 // - Missing, unknown or search-disabled results keep the previous state.
 
-export function createRestockTracker({ outRounds = 2, realertMs = 90000 } = {}) {
-  const state = new Map(); // `${store}|${part}` -> { inStock, since, missCount, lastOut }
+export function createRestockTracker({ outRounds = 2, realertMs = 90000, initial = null } = {}) {
+  // `${store}|${part}` -> { inStock, since, missCount, lastOut }
+  const state = new Map(initial ? Object.entries(initial) : []);
 
   function update(storesById, storeIds, parts, now = Date.now()) {
     const landed = [];
@@ -59,5 +60,14 @@ export function createRestockTracker({ outRounds = 2, realertMs = 90000 } = {}) 
     return rows;
   }
 
-  return { update, inStock };
+  // Plain object for persisting between runs (Durable Object storage).
+  function toJSON() {
+    const out = {};
+    for (const [key, value] of state) {
+      if (value.inStock || value.lastOut) out[key] = value;
+    }
+    return out;
+  }
+
+  return { update, inStock, toJSON };
 }

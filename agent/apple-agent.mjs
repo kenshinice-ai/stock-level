@@ -14,14 +14,15 @@ import { spawn } from "node:child_process";
 import {
   APPLE_BASE,
   FAMILIES,
-  STORES,
   STORE_BY_ID,
   describePart,
   pickAnchors,
   productUrl,
+  resolveStores,
   selectParts
 } from "../src/apple/catalog-au.mjs";
 import { scanStores } from "../src/apple/fulfillment.mjs";
+import { csv, escapeHtml, groupByStore, landedMessage, sendTelegram } from "../src/apple/notify.mjs";
 import { createRestockTracker } from "../src/apple/restock-state.mjs";
 
 const args = new Set(process.argv.slice(2));
@@ -29,7 +30,7 @@ const env = process.env;
 
 const config = {
   family: (env.FAMILY || "iphoneduo").trim().toLowerCase(),
-  stores: parseStores(env.STORES || "all"),
+  stores: resolveStores(env.STORES || "all"),
   caps: csv(env.CAPS).map((v) => v.toLowerCase().replace(/\s+/g, "")),
   colors: csv(env.COLORS).map((v) => v.toLowerCase().replace(/\s+/g, "")),
   intervalSec: Math.max(15, Number(env.INTERVAL_SEC) || 30),
@@ -141,30 +142,11 @@ async function scan(parts, anchors) {
 }
 
 async function alertLanded(landed) {
-  const byStore = new Map();
-  for (const item of landed) {
-    if (!byStore.has(item.storeId)) byStore.set(item.storeId, []);
-    byStore.get(item.storeId).push(item);
-  }
-
-  for (const [storeId, items] of byStore) {
-    const store = STORE_BY_ID[storeId];
-    const lines = items.map((item) => {
-      const d = describePart(item.part);
-      const quote = item.quote ? ` — ${escapeHtml(item.quote)}` : "";
-      return `• <a href="${productUrl(item.part)}">${escapeHtml(d.label)}</a>${quote}`;
-    });
-    const text =
-      `🟢 <b>有货！Apple ${escapeHtml(store ? store.name : storeId)}</b>` +
-      (store ? ` (${escapeHtml(store.city)}, ${store.state})` : "") +
-      `\n${lines.join("\n")}\n\n点链接 → 选 Pickup → 选这家店，尽快付款锁定。`;
-
-    log(`IN STOCK at ${storeName(storeId)}: ${items.map((i) => shortLabel(i.part)).join(", ")}`);
-    await notify(text, {
-      html: true,
-      button: { text: `Reserve ${describePart(items[0].part).label}`, url: productUrl(items[0].part) }
-    });
-    beep(`iPhone in stock at ${store ? store.name : storeId}`);
+  for (const group of groupByStore(landed)) {
+    log(`IN STOCK at ${storeName(group.storeId)}: ${group.items.map((i) => shortLabel(i.part)).join(", ")}`);
+    const message = landedMessage(group);
+    await notify(message.text, message);
+    beep(`iPhone in stock at ${group.store ? group.store.name : group.storeId}`);
   }
 }
 
@@ -198,27 +180,7 @@ function printTable(result, parts) {
 // ---------------------------------------------------------------- alerts
 
 async function notify(text, { html = false, button = null } = {}) {
-  if (!config.telegramToken || !config.telegramChatIds.length) return;
-
-  for (const chatId of config.telegramChatIds) {
-    const body = {
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-      ...(html ? { parse_mode: "HTML" } : {}),
-      ...(button ? { reply_markup: { inline_keyboard: [[button]] } } : {})
-    };
-    try {
-      const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) log(`Telegram send failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
-    } catch (err) {
-      log(`Telegram send failed: ${err.message}`);
-    }
-  }
+  await sendTelegram(config.telegramToken, config.telegramChatIds, { text, html, button }, { log });
 }
 
 function beep(message) {
@@ -271,32 +233,6 @@ async function testAlert() {
 
 // ---------------------------------------------------------------- helpers
 
-function parseStores(value) {
-  const tokens = csv(value).map((v) => v.toUpperCase());
-  if (!tokens.length || tokens.includes("ALL")) return STORES.map((s) => s.id);
-  const ids = new Set();
-  for (const token of tokens) {
-    for (const store of STORES) {
-      if (
-        store.id === token ||
-        store.state === token ||
-        store.name.toUpperCase() === token ||
-        store.city.toUpperCase() === token
-      ) {
-        ids.add(store.id);
-      }
-    }
-  }
-  return [...ids];
-}
-
-function csv(value) {
-  return String(value || "")
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean);
-}
-
 function storeName(id) {
   return STORE_BY_ID[id] ? STORE_BY_ID[id].name : id;
 }
@@ -304,10 +240,6 @@ function storeName(id) {
 function shortLabel(part) {
   const d = describePart(part);
   return d.family ? d.label.replace(`${d.familyName} `, "") : part;
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 }
 
 function jitter(sec) {

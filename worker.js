@@ -6,9 +6,13 @@ import {
   describePart,
   pickAnchors,
   productUrl,
+  resolveStores,
   selectParts
 } from "./src/apple/catalog-au.mjs";
 import { fetchFulfillment, scanStores } from "./src/apple/fulfillment.mjs";
+import { AppleWatcher } from "./src/apple/watcher.mjs";
+
+export { AppleWatcher };
 
 const VERSION = "2026-10-28-v16-apple-pickup";
 
@@ -58,7 +62,7 @@ export default {
       const path = cleanPath(url.pathname);
 
       if (path.startsWith("/api/")) {
-        return handleApi(url, path);
+        return handleApi(url, path, env);
       }
 
       if (env && env.ASSETS) {
@@ -76,12 +80,22 @@ export default {
         500
       );
     }
+  },
+
+  // Cron (every minute): keep the Apple watcher's alarm loop running.
+  async scheduled(event, env, ctx) {
+    if (!env || !env.APPLE_WATCHER) return;
+    ctx.waitUntil(appleWatcherStub(env).fetch("https://apple-watcher/ensure"));
   }
 };
 
-async function handleApi(url, path) {
+function appleWatcherStub(env) {
+  return env.APPLE_WATCHER.get(env.APPLE_WATCHER.idFromName("au"));
+}
+
+async function handleApi(url, path, env) {
   if (path.startsWith("/api/apple/")) {
-    return handleAppleApi(url, path);
+    return handleAppleApi(url, path, env);
   }
 
   if (path === "/api/health") {
@@ -373,7 +387,19 @@ async function handleApi(url, path) {
   );
 }
 
-async function handleAppleApi(url, path) {
+async function handleAppleApi(url, path, env) {
+  // Status of the Cloudflare watcher (cron + Durable Object).
+  if (path === "/api/apple/watch") {
+    if (!env || !env.APPLE_WATCHER) {
+      return json({ ok: false, version: VERSION, error: "APPLE_WATCHER binding not configured" }, 503);
+    }
+    const stub = appleWatcherStub(env);
+    // Starts the loop on first visit too, so it runs before the first cron.
+    await stub.fetch("https://apple-watcher/ensure");
+    const res = await stub.fetch("https://apple-watcher/status");
+    return json({ version: VERSION, ...(await res.json()) });
+  }
+
   if (path === "/api/apple/config") {
     return json({
       ok: true,
@@ -428,7 +454,7 @@ async function handleAppleApi(url, path) {
 
     const caps = csvParam(url.searchParams.get("caps"));
     const colors = csvParam(url.searchParams.get("colors"));
-    const storeIds = resolveAppleStores(url.searchParams.get("stores"));
+    const storeIds = resolveStores(url.searchParams.get("stores"));
     const parts = selectParts(family, { caps, colors });
 
     if (!parts.length || !storeIds.length) {
@@ -519,18 +545,6 @@ function parseAppleParts(value) {
     .map((part) => part.toUpperCase())
     .filter((part) => /^[A-Z0-9]{5,8}\/A$/.test(part))
     .slice(0, 20);
-}
-
-// "all", store ids (R180), states (VIC) or store names, comma separated.
-function resolveAppleStores(value) {
-  const tokens = csvParam(value || "all").map((token) => token.toUpperCase());
-  if (!tokens.length || tokens.includes("ALL")) return APPLE_STORES.map((store) => store.id);
-
-  return APPLE_STORES.filter((store) =>
-    tokens.some(
-      (token) => store.id === token || store.state === token || store.name.toUpperCase() === token
-    )
-  ).map((store) => store.id);
 }
 
 function csvParam(value) {

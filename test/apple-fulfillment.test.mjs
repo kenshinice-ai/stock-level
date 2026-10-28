@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { APPLE_BASE, STORES, pickAnchors, selectParts } from "../src/apple/catalog-au.mjs";
 import {
@@ -97,4 +98,28 @@ test("pickAnchors picks one store per state, preferring the metro anchor", () =>
 test("selectParts filters by capacity and colour", () => {
   assert.equal(selectParts("iphoneduo").length, 8);
   assert.deepEqual(selectParts("iphoneduo", { caps: ["256gb"], colors: ["nightsky"] }), ["MK2E4X/A"]);
+});
+
+test("parseFulfillment reads a real apple.com/au response (mts.0=expanded, 2026-10-28)", () => {
+  const raw = JSON.parse(readFileSync(new URL("./fixtures/fulfillment-expanded-r180.json", import.meta.url), "utf8"));
+  const { stores } = parseFulfillment(raw, ["MK2G4X/A"]);
+  assert.equal(stores.length, 1);
+  assert.equal(stores[0].storeId, "R180");
+  assert.equal(stores[0].storeName, "Chadstone");
+  assert.equal(stores[0].pickupEligible, true);
+  assert.deepEqual(stores[0].parts["MK2G4X/A"], {
+    status: "unavailable",
+    searchEnabled: true,
+    quote: "Unavailable for Pickup"
+  });
+
+  const available = structuredClone(raw);
+  const item = available.body.content.pickupMessage.stores[0].partsAvailability["MK2G4X/A"];
+  item.pickupDisplay = "available";
+  item.messageTypes.expanded.storePickupQuote = "Today at Apple Chadstone";
+  assert.deepEqual(parseFulfillment(available, ["MK2G4X/A"]).stores[0].parts["MK2G4X/A"], {
+    status: "available",
+    searchEnabled: true,
+    quote: "Today at Apple Chadstone"
+  });
 });

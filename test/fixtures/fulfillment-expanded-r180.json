@@ -1,0 +1,63 @@
+{
+  "head": { "status": "200", "data": {} },
+  "body": {
+    "content": {
+      "pickupMessage": {
+        "stores": [
+          {
+            "storeEmail": "chadstone@apple.com",
+            "storeName": "Chadstone",
+            "state": "VIC",
+            "country": "AU",
+            "city": "Chadstone",
+            "storeNumber": "R180",
+            "partsAvailability": {
+              "MK2G4X/A": {
+                "storePickEligible": true,
+                "pickupSearchQuote": "Unavailable for Pickup",
+                "partNumber": "MK2G4X/A",
+                "purchaseOption": "",
+                "ctoOptions": "",
+                "pickupDisplay": "unavailable",
+                "pickupType": "In-Store Pickup",
+                "messageTypes": {
+                  "expanded": {
+                    "storeSearchEnabled": true,
+                    "storePickupLabel": "Pick-up:",
+                    "storeSelectionEnabled": false,
+                    "storePickupQuote": "Unavailable for Pickup",
+                    "storePickupLinkText": "Check another store",
+                    "storePickupProductTitle": "iPhone Duo 512GB Night Sky",
+                    "basePartNumber": "MK2G4"
+                  }
+                }
+              }
+            },
+            "phoneNumber": "03-90387500",
+            "pickupTypeAvailabilityText": "In-Store Pickup available at this location.",
+            "address": {
+              "address": "Apple Chadstone",
+              "address3": "1341 Dandenong Road",
+              "address2": "Chadstone Shopping Centre",
+              "postalCode": "3148"
+            },
+            "storelatitude": -37.885829,
+            "storelongitude": 145.082502,
+            "storedistance": 0.0,
+            "storelistnumber": 1,
+            "storeListNumber": 1,
+            "rank": 1
+          }
+        ],
+        "overlayInitiatedFromWarmStart": true,
+        "storesCount": "1",
+        "little": false,
+        "pickupLocation": "Apple Chadstone",
+        "notAvailableNearby": "Not available today at [X] nearest stores.",
+        "availability": { "isComingSoon": false },
+        "availabilityStores": "R180,R342,R343,R504,R530",
+        "filteredTopStore": false
+      }
+    }
+  }
+}

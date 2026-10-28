@@ -58,17 +58,18 @@ export function parseFulfillment(raw, requestedParts = []) {
         }
 
         const display = String(item.pickupDisplay || "").toLowerCase();
-        const regular = item.messageTypes && item.messageTypes.regular;
+        // The site asks for mts.0=expanded; older clients used regular/compact.
+        const types = item.messageTypes || {};
+        const message = types.expanded || types.regular || types.compact || Object.values(types)[0] || {};
+        const searchEnabled = item.storeSearchEnabled ?? message.storeSearchEnabled;
+        let status =
+          display === "available" || display === "unavailable" || display === "ineligible" ? display : "unknown";
+        if (status !== "available" && item.storePickEligible === false) status = "ineligible";
 
         parts[part] = {
-          status:
-            display === "available" || display === "unavailable" || display === "ineligible"
-              ? display
-              : "unknown",
-          searchEnabled: item.storeSearchEnabled !== false,
-          quote: String(
-            (regular && regular.storePickupQuote) || item.pickupSearchQuote || ""
-          ).replace(/<[^>]+>/g, "")
+          status,
+          searchEnabled: searchEnabled !== false,
+          quote: String(message.storePickupQuote || item.pickupSearchQuote || "").replace(/<[^>]+>/g, "")
         };
       }
 

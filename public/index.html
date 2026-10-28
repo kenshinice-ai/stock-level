@@ -627,6 +627,61 @@
       text-decoration: none;
     }
 
+    .toolbar.with-alert {
+      grid-template-columns: minmax(200px, 1fr) 190px 165px 130px 170px;
+    }
+
+    .alert-btn {
+      background: linear-gradient(135deg, #f59e0b, #ea580c);
+      box-shadow: 0 14px 28px rgba(234, 88, 12, 0.22);
+    }
+
+    .alert-box {
+      display: none;
+      margin-top: 16px;
+      padding: 18px;
+      border: 1px solid rgba(234, 88, 12, 0.25);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 247, 237, 0.92);
+      box-shadow: var(--shadow-soft);
+      line-height: 1.55;
+    }
+
+    .alert-box.show {
+      display: block;
+    }
+
+    .alert-box .tg-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      min-height: 46px;
+      padding: 0 18px;
+      border-radius: 999px;
+      background: #229ed9;
+      color: #fff;
+      font-weight: 900;
+      text-decoration: none;
+    }
+
+    .alert-box small {
+      color: var(--muted);
+    }
+
+    .store-actions button.bell {
+      width: auto;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(234, 88, 12, 0.35);
+      background: #fff7ed;
+      color: #c2410c;
+      box-shadow: none;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
     .collect-note {
       color: var(--muted);
       font-size: 12px;
@@ -725,8 +780,13 @@
         gap: 10px;
       }
 
-      .toolbar #filterInput {
+      .toolbar #filterInput,
+      .toolbar.with-alert #alertBtn {
         grid-column: 1 / -1;
+      }
+
+      .toolbar.with-alert {
+        grid-template-columns: 1fr 1fr;
       }
 
       .metric {
@@ -910,7 +970,10 @@
       </label>
 
       <button id="refreshBtn" class="ghost-btn" type="button" data-i18n="refresh">↻ Refresh</button>
+      <button id="alertBtn" class="alert-btn" type="button" data-i18n="alertNearby" hidden>🔔 Restock alert</button>
     </section>
+
+    <section id="alertBox" class="alert-box" aria-live="polite"></section>
 
     <section id="results" class="results"></section>
 
@@ -951,6 +1014,8 @@
     const sortInput = $("sortInput");
     const inStockOnly = $("inStockOnly");
     const refreshBtn = $("refreshBtn");
+    const alertBtn = $("alertBtn");
+    const alertBox = $("alertBox");
     const csvBtn = $("csvBtn");
 
     let lastData = null;
@@ -959,6 +1024,9 @@
     let lastPicks = [];
     let geo = null; // { lat, lng } from the browser, never put in the URL
     let busy = false;
+    let alertsEnabled = false;
+    let alertPoll = null;
+    let productLookup = Promise.resolve();
     let currentLang = storageGet("owStockLang") || "en";
 
     const I18N = {
@@ -1015,7 +1083,16 @@
         unknown: "Unknown",
         directions: "Directions",
         call: "Call",
-        viewOnOfficeworks: "View on Officeworks"
+        viewOnOfficeworks: "View on Officeworks",
+        alertNearby: "🔔 Restock alert",
+        alertStore: "🔔 Alert me",
+        alertCreating: "Creating alert…",
+        alertOpenTelegram: "Open Telegram and tap Start",
+        alertWatching: "Watching {n} store(s): {names}.",
+        alertConfirmHint: "The alert turns on after you tap Start in Telegram. The link works for 24 hours.",
+        alertLinked: "✅ Alert is on. Telegram will message you when it is back in stock (checked every 5 minutes, for 30 days).",
+        alertAllInStock: "All nearby stores already have stock, so no alert is needed.",
+        alertFailed: "Could not create the alert"
       },
       zh: {
         brand: "📦 Officeworks 库存查询",
@@ -1070,7 +1147,16 @@
         unknown: "未知",
         directions: "导航",
         call: "打电话",
-        viewOnOfficeworks: "在 Officeworks 查看"
+        viewOnOfficeworks: "在 Officeworks 查看",
+        alertNearby: "🔔 到货提醒",
+        alertStore: "🔔 到货提醒",
+        alertCreating: "正在创建提醒…",
+        alertOpenTelegram: "打开 Telegram 点 Start 确认",
+        alertWatching: "将监控 {n} 家门店：{names}。",
+        alertConfirmHint: "在 Telegram 点 Start 后提醒才会开启，链接 24 小时内有效。",
+        alertLinked: "✅ 提醒已开启。到货时 Telegram 会通知你（每 5 分钟检查一次，持续 30 天）。",
+        alertAllInStock: "附近门店都有货，不需要提醒。",
+        alertFailed: "创建提醒失败"
       }
     };
 
@@ -1319,6 +1405,8 @@
       summaryBox.classList.add("show");
       toolbar.classList.add("show");
       csvBtn.hidden = true;
+      alertBtn.hidden = true;
+      toolbar.classList.remove("with-alert");
 
       const pageUrl = new URL(window.location.href);
       pageUrl.search = "";
@@ -1331,7 +1419,7 @@
       storagePostcode();
 
       // The product lookup is slow upstream, so it runs alongside the stock check.
-      apiGet(`/api/product?sku=${encodeURIComponent(sku)}`)
+      productLookup = apiGet(`/api/product?sku=${encodeURIComponent(sku)}`)
         .then((data) => {
           if (lastSku !== sku || !data.product || !data.product.rawFound) return;
           lastData.product = data.product;
@@ -1398,6 +1486,7 @@
         if (totalStores) {
           hideStatus();
           csvBtn.hidden = false;
+          showAlertButton();
         }
         renderRows();
       } catch (err) {
@@ -1510,6 +1599,9 @@
       ];
       if (row.phone) {
         actions.push(`<a href="tel:${escapeHtml(row.phone.replace(/[^0-9+]/g, ""))}">📞 ${escapeHtml(row.phone)}</a>`);
+      }
+      if (alertsEnabled && row.status === "no_stock") {
+        actions.push(`<button class="bell" type="button" data-alert-store="${escapeHtml(row.storeId)}">${escapeHtml(t("alertStore"))}</button>`);
       }
 
       const inStore = normalNumber(row.inStoreQuantity);
@@ -1640,6 +1732,100 @@
       runCheck(chip.dataset.sku, chip.textContent);
     });
 
+    // ------------------------------------------------------------ restock alerts
+
+    function showAlertButton() {
+      alertBtn.hidden = !alertsEnabled;
+      toolbar.classList.toggle("with-alert", alertsEnabled);
+    }
+
+    // The nearest stores (max 10) that have no stock right now.
+    function nearestWithoutStock() {
+      return lastRows
+        .filter((row) => row.status === "no_stock")
+        .sort((a, b) => sortDistance(a) - sortDistance(b))
+        .slice(0, 10);
+    }
+
+    async function createAlert(stores) {
+      if (!stores.length) {
+        showAlertBox(`<strong>${escapeHtml(t("alertAllInStock"))}</strong>`);
+        return;
+      }
+
+      showAlertBox(escapeHtml(t("alertCreating")));
+      // Give the slow product lookup a chance so the alert carries a real name.
+      await Promise.race([productLookup, sleep(15000)]);
+      const product = (lastData && lastData.product) || {};
+
+      try {
+        const response = await fetch(`${API_BASE}/api/alerts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({
+            sku: lastSku,
+            productName: product.name || lastSku,
+            productUrl: product.url || "",
+            lang: currentLang,
+            stores: stores.map((row) => ({ storeId: row.storeId, storeName: row.storeName, postcode: row.postcode }))
+          })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+
+        const names = stores.map((row) => row.storeName.replace(/ Officeworks$/, "")).join(", ");
+        const watching = t("alertWatching").replace("{n}", stores.length).replace("{names}", names);
+        showAlertBox(`
+          <strong>${escapeHtml(product.name || lastSku)}</strong><br />
+          ${escapeHtml(watching)}<br />
+          <a class="tg-link" href="${escapeHtml(data.startUrl)}" target="_blank" rel="noopener">✈️ ${escapeHtml(t("alertOpenTelegram"))}</a><br />
+          <small>${escapeHtml(t("alertConfirmHint"))}</small>
+        `);
+        waitForLink(data.id);
+      } catch (err) {
+        showAlertBox(`<span class="error">${escapeHtml(t("alertFailed"))}: ${escapeHtml(err.message)}</span>`);
+      }
+    }
+
+    function showAlertBox(markup) {
+      alertBox.innerHTML = markup;
+      alertBox.classList.add("show");
+      alertBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    // Poll until the person taps Start in Telegram (up to 5 minutes).
+    function waitForLink(id) {
+      clearInterval(alertPoll);
+      const startedAt = Date.now();
+      alertPoll = setInterval(async () => {
+        if (Date.now() - startedAt > 5 * 60 * 1000) return clearInterval(alertPoll);
+        try {
+          const data = await apiGet(`/api/alerts/${encodeURIComponent(id)}`);
+          if (data.linked) {
+            clearInterval(alertPoll);
+            showAlertBox(`<strong>${escapeHtml(t("alertLinked"))}</strong>`);
+          }
+        } catch {}
+      }, 3000);
+    }
+
+    alertBtn.addEventListener("click", () => createAlert(nearestWithoutStock()));
+
+    resultsBox.addEventListener("click", (event) => {
+      const bell = event.target.closest("[data-alert-store]");
+      if (!bell) return;
+      const row = lastRows.find((r) => r.storeId === bell.dataset.alertStore);
+      if (row) createAlert([row]);
+    });
+
+    apiGet("/api/alerts/config")
+      .then((data) => {
+        alertsEnabled = Boolean(data.enabled && data.botUsername);
+        if (lastRows.length && !busy) showAlertButton();
+        renderRows();
+      })
+      .catch(() => {});
+
     // ------------------------------------------------------------ CSV
 
     function exportCsv() {
@@ -1674,6 +1860,10 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(link.href);
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     function csvCell(value) {

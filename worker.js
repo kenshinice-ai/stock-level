@@ -11,27 +11,24 @@ import {
 } from "./src/apple/catalog-au.mjs";
 import { fetchFulfillment, scanStores } from "./src/apple/fulfillment.mjs";
 import { AppleWatcher } from "./src/apple/watcher.mjs";
+import {
+  OW,
+  fetchAvailabilityRaw,
+  fetchJson,
+  mapLimit,
+  parseCurrentAvailability,
+  parseQty
+} from "./src/officeworks/client.mjs";
 import { resolveOrigin, storesWithinRadius } from "./src/officeworks/geo.mjs";
+import { WatchHub } from "./src/officeworks/watch-hub.mjs";
 
-export { AppleWatcher };
+export { AppleWatcher, WatchHub };
 
-const VERSION = "2026-10-28-v17-ow-radius-search";
+const VERSION = "2026-10-28-v18-ow-alerts";
 
 const APPLE_CHECK_CACHE_SECONDS = 20;
 
-const OW = {
-  stores: "https://www.officeworks.com.au/contact-us?view=stores&format=json",
-  productSearch:
-    "https://www.officeworks.com.au/shop/ProductSearchView?pageSize=50&langId=-1&catalogId=-1&storeId=10151&searchTerm=",
-  availabilityBase:
-    "https://www.officeworks.com.au/catalogue-app/api/availabilities/store"
-};
-
 const MAX_BATCH_SIZE = 20;
-
-// Availability changes slowly enough that repeat checks within a minute can
-// share one upstream call per store.
-const AVAILABILITY_CACHE_SECONDS = 60;
 
 const ALLOWED_STATES = new Set([
   "all",
@@ -47,7 +44,7 @@ const ALLOWED_STATES = new Set([
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Accept",
   "Access-Control-Max-Age": "86400"
 };
@@ -59,12 +56,16 @@ export default {
         return new Response(null, { status: 204, headers: CORS });
       }
 
+      const url = new URL(request.url);
+      const path = cleanPath(url.pathname);
+
+      if (request.method === "POST" && POST_ROUTES.has(path)) {
+        return handlePost(request, path, env);
+      }
+
       if (request.method !== "GET") {
         return json({ ok: false, error: "Method not allowed" }, 405);
       }
-
-      const url = new URL(request.url);
-      const path = cleanPath(url.pathname);
 
       if (path.startsWith("/api/")) {
         return handleApi(url, path, env);
@@ -87,12 +88,55 @@ export default {
     }
   },
 
-  // Cron (every minute): keep the Apple watcher's alarm loop running.
+  // Cron: re-check Officeworks restock alerts (and keep the Apple watcher's
+  // alarm loop running if that is enabled).
   async scheduled(event, env, ctx) {
-    if (!env || !env.APPLE_WATCHER) return;
-    ctx.waitUntil(appleWatcherStub(env).fetch("https://apple-watcher/ensure"));
+    if (env && env.WATCH_HUB) {
+      ctx.waitUntil(watchHubStub(env).fetch("https://watch-hub/run", { method: "POST", body: "{}" }));
+    }
+    if (env && env.APPLE_WATCHER) {
+      ctx.waitUntil(appleWatcherStub(env).fetch("https://apple-watcher/ensure"));
+    }
   }
 };
+
+const POST_ROUTES = new Set(["/api/alerts", "/api/telegram/webhook"]);
+const MAX_POST_BYTES = 8192;
+
+function watchHubStub(env) {
+  return env.WATCH_HUB.get(env.WATCH_HUB.idFromName("officeworks"));
+}
+
+async function forwardToHub(env, path, init) {
+  const res = await watchHubStub(env).fetch(`https://watch-hub${path}`, init);
+  const payload = await res.json();
+  return json({ version: VERSION, ...payload }, res.status);
+}
+
+async function handlePost(request, path, env) {
+  if (!env || !env.WATCH_HUB) {
+    return json({ ok: false, error: "Alerts are not configured" }, 503);
+  }
+
+  const text = await request.text();
+  if (text.length > MAX_POST_BYTES) {
+    return json({ ok: false, error: "Request too large" }, 413);
+  }
+
+  // Telegram -> bot webhook. Telegram echoes the secret set in setWebhook.
+  if (path === "/api/telegram/webhook") {
+    const secret = env.TELEGRAM_WEBHOOK_SECRET || "";
+    if (!secret || request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== secret) {
+      return json({ ok: false, error: "Forbidden" }, 403);
+    }
+    await watchHubStub(env).fetch("https://watch-hub/telegram", { method: "POST", body: text });
+    // Always 200 so Telegram does not retry the same update.
+    return json({ ok: true });
+  }
+
+  // Page -> create a restock alert.
+  return forwardToHub(env, "/create", { method: "POST", body: text });
+}
 
 function appleWatcherStub(env) {
   return env.APPLE_WATCHER.get(env.APPLE_WATCHER.idFromName("au"));
@@ -101,6 +145,32 @@ function appleWatcherStub(env) {
 async function handleApi(url, path, env) {
   if (path.startsWith("/api/apple/")) {
     return handleAppleApi(url, path, env);
+  }
+
+  if (path === "/api/alerts/config") {
+    if (!env || !env.WATCH_HUB) return json({ ok: true, version: VERSION, enabled: false });
+    return forwardToHub(env, "/config");
+  }
+
+  // Status of one alert, polled by the page while waiting for Telegram.
+  if (path.startsWith("/api/alerts/")) {
+    if (!env || !env.WATCH_HUB) return json({ ok: false, error: "Alerts are not configured" }, 503);
+    const id = path.slice("/api/alerts/".length).replace(/[^a-z0-9]/g, "");
+    return forwardToHub(env, `/watch?id=${id}`);
+  }
+
+  // One-off: point the Telegram bot's webhook at this Worker.
+  // /api/telegram/setup?secret=<TELEGRAM_WEBHOOK_SECRET>
+  if (path === "/api/telegram/setup") {
+    const secret = env && env.TELEGRAM_WEBHOOK_SECRET;
+    if (!secret || !/^[A-Za-z0-9_-]{16,256}$/.test(secret)) {
+      return json({ ok: false, error: "Set TELEGRAM_WEBHOOK_SECRET (16+ letters, digits, _ or -) first" }, 503);
+    }
+    if (url.searchParams.get("secret") !== secret) {
+      return json({ ok: false, error: "Forbidden" }, 403);
+    }
+    if (!env.WATCH_HUB) return json({ ok: false, error: "WATCH_HUB binding not configured" }, 503);
+    return forwardToHub(env, "/setup", { method: "POST", body: JSON.stringify({ origin: url.origin }) });
   }
 
   if (path === "/api/health") {
@@ -586,77 +656,6 @@ function csvParam(value) {
     .filter(Boolean);
 }
 
-async function fetchAvailabilityRaw(storeId, postcode, sku) {
-  const url =
-    `${OW.availabilityBase}/${encodeURIComponent(storeId)}` +
-    `/postcode/${encodeURIComponent(postcode)}` +
-    `?partNumbers=${encodeURIComponent(sku)}`;
-
-  const cache = caches.default;
-  const cacheKey = new Request(`https://stock-level-cache.local/availability-v1?store=${storeId}&postcode=${postcode}&sku=${sku}`);
-  const cached = await cache.match(cacheKey);
-  if (cached) return cached.json();
-
-  const raw = await fetchJson(url, {
-    cacheTtl: 0,
-    label: `current availability ${storeId}/${postcode}/${sku}`
-  });
-
-  await cache.put(
-    cacheKey,
-    new Response(JSON.stringify(raw), {
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": `public, max-age=${AVAILABILITY_CACHE_SECONDS}`
-      }
-    })
-  );
-
-  return raw;
-}
-
-function parseCurrentAvailability(raw, sku) {
-  const items = Array.isArray(raw) ? raw : [raw];
-
-  const target =
-    items.find((item) => String(item && item.sku).toUpperCase() === sku) ||
-    items[0] ||
-    null;
-
-  if (!target || typeof target !== "object") {
-    return {
-      qty: 0,
-      inStoreQuantity: 0,
-      clickAndCollectQuantity: 0,
-      deliveryQuantity: 0,
-      status: "no_stock",
-      source: "current:empty-response",
-      rawSignal: "No availability object returned"
-    };
-  }
-
-  const inStoreQuantity = parseQty(target.inStoreQuantity) || 0;
-  const clickAndCollectQuantity = parseQty(target.clickAndCollectQuantity) || 0;
-  const deliveryQuantity = parseQty(target.deliveryQuantity) || 0;
-
-  const qty = Math.max(inStoreQuantity, clickAndCollectQuantity);
-
-  return {
-    qty,
-    inStoreQuantity,
-    clickAndCollectQuantity,
-    deliveryQuantity,
-    status: qty > 0 ? "in_stock" : "no_stock",
-    source:
-      "current:catalogue-app/api/availabilities/store/{storeId}/postcode/{postcode}",
-    rawSignal:
-      `inStore=${inStoreQuantity}, clickAndCollect=${clickAndCollectQuantity}, delivery=${deliveryQuantity}`,
-    collectEstimation: target.collectEstimation || "",
-    deliveryEstimation: target.deliveryEstimation || "",
-    quickCollect: target.isQuickCollectAvailable === true
-  };
-}
-
 async function getProduct(sku) {
   const cache = caches.default;
   const cacheKey = new Request(`https://stock-level-cache.local/product-v16?sku=${sku}`);
@@ -1094,25 +1093,6 @@ function clampNumber(value, min, max, fallback) {
   return Math.max(min, Math.min(max, n));
 }
 
-function parseQty(value) {
-  if (value === null || typeof value === "undefined") return null;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    const direct = Number(trimmed);
-    if (Number.isFinite(direct)) return direct;
-
-    const match = trimmed.match(/\d+/);
-    if (match) {
-      const n = Number(match[0]);
-      if (Number.isFinite(n)) return n;
-    }
-  }
-
-  return null;
-}
-
 function stockSortValue(row) {
   if (!row) return 0;
   const qty = Number(row.qty || 0);
@@ -1124,55 +1104,6 @@ function sortDistanceValue(row) {
   if (typeof row.distanceKm === "number") return row.distanceKm;
   if (typeof row.postcodeScore === "number") return row.postcodeScore;
   return 999999;
-}
-
-async function fetchJson(url, options = {}) {
-  const cacheTtl = Number(options.cacheTtl || 0);
-  const label = options.label || "upstream";
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Accept": "application/json,text/plain,*/*",
-      "User-Agent": "Mozilla/5.0 OfficeworksStockChecker/10.0",
-      "Referer": "https://www.officeworks.com.au/",
-      "Origin": "https://www.officeworks.com.au"
-    },
-    cf:
-      cacheTtl > 0
-        ? { cacheTtl, cacheEverything: true }
-        : { cacheTtl: 0 }
-  });
-
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new Error(`${label} upstream HTTP ${response.status}: ${text.slice(0, 240)}`);
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`${label} returned non-JSON response: ${text.slice(0, 240)}`);
-  }
-}
-
-async function mapLimit(items, limit, mapper) {
-  const results = new Array(items.length);
-  let index = 0;
-
-  async function runner() {
-    while (index < items.length) {
-      const i = index++;
-      results[i] = await mapper(items[i], i);
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, () => runner())
-  );
-
-  return results;
 }
 
 function decodeHtml(value) {

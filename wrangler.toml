@@ -8,3 +8,18 @@ directory = "./public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
+
+# Officeworks restock alerts over Telegram (src/officeworks/watch-hub.mjs).
+# Secrets (Dashboard > Worker > Settings > Variables and Secrets, or
+# `wrangler secret put`): TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET.
+# Then open /api/telegram/setup?secret=<TELEGRAM_WEBHOOK_SECRET> once.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[durable_objects.bindings]]
+name = "WATCH_HUB"
+class_name = "WatchHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["WatchHub"]

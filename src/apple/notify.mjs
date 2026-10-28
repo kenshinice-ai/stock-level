@@ -1,10 +1,9 @@
 // Telegram alerts shared by the local agent and the Cloudflare watcher.
 
+import { escapeHtml, sendTelegram } from "../lib/telegram.mjs";
 import { STORE_BY_ID, describePart, productUrl } from "./catalog-au.mjs";
 
-export function escapeHtml(value) {
-  return String(value).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-}
+export { escapeHtml, sendTelegram };
 
 // Groups landed items by store: [{ storeId, store, items }]
 export function groupByStore(landed) {
@@ -34,37 +33,6 @@ export function landedMessage({ storeId, store, items }, { source = "" } = {}) {
     html: true,
     button: { text: `Reserve ${first.label}`, url: productUrl(items[0].part) }
   };
-}
-
-// Sends to every chat id; returns the number of failed sends.
-export async function sendTelegram(token, chatIds, { text, html = false, button = null }, { fetchImpl = fetch, log = () => {} } = {}) {
-  if (!token || !chatIds || !chatIds.length) return 0;
-
-  let failed = 0;
-  for (const chatId of chatIds) {
-    const body = {
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-      ...(html ? { parse_mode: "HTML" } : {}),
-      ...(button ? { reply_markup: { inline_keyboard: [[button]] } } : {})
-    };
-    try {
-      const res = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) {
-        failed += 1;
-        log(`Telegram send failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
-      }
-    } catch (err) {
-      failed += 1;
-      log(`Telegram send failed: ${err.message}`);
-    }
-  }
-  return failed;
 }
 
 export function csv(value) {
